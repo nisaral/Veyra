@@ -1,0 +1,7 @@
+**/__pycache__/
+*.pyc
+.pytest_cache/
+veyra/dist/
+veyra/out/**/workspaces/
+veyra/out/**/checkpoints/
+veyra/out/**/runs/

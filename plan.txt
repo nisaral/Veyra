@@ -1,0 +1,4063 @@
+# Status: rejected superset
+
+The runnable project is `veyra/`. Its source of truth is `veyra/docs/ARCHITECTURE.md`
+and `veyra/docs/PREREGISTRATION.md`. This file is the larger execution-OS sketch
+that v0.1 deliberately did not build: control plane, marketplace, ClickHouse,
+Kubernetes, a Jev-model zoo, and a second public SDK. Do not implement those
+from this document.
+
+# Adaptive Agent Execution Runtime
+
+## Working concept
+
+Build an open-source, model-agnostic runtime for long-horizon AI agents.
+
+The runtime does not require users to replace their preferred agent framework.
+
+Instead, it sits one level above or around existing agent systems and dynamically decides:
+
+- which model should execute the next step,
+- whether a model call is even necessary,
+- which tool should be used,
+- whether a specialist agent should be invoked,
+- whether to use one agent or multiple agents,
+- how much context/memory should be supplied,
+- whether to verify,
+- whether to retry,
+- whether to parallelize,
+- whether to ask for human approval,
+- and when to terminate.
+
+The core abstraction is:
+
+    TASK STATE
+        ↓
+    DECISION
+        ↓
+    ACTION
+        ↓
+    OBSERVATION
+        ↓
+    UPDATED STATE
+        ↓
+    DECISION
+        ↓
+       ...
+
+The runtime is therefore an **adaptive execution scheduler for intelligence**.
+
+---
+
+# 1. Why this is worth building
+
+The agent-framework market is already crowded.
+
+OpenAI Agents SDK provides agents, tools, handoffs, guardrails, sandbox agents and tracing.
+
+Google ADK 2.0 already provides graph workflows, routing, loops, retries, fan-out/fan-in, dynamic nodes, state and human-in-the-loop workflows.
+
+Microsoft Agent Framework similarly provides agents, middleware, workflows, routing, checkpointing, observability, MCP and A2A integrations, including a Go implementation.
+
+OpenHands already provides a serious coding-agent runtime with tools, workspaces and agent execution infrastructure.
+
+MCP is now a major interoperability layer, with its Python SDK v2 supporting the July 28, 2026 specification and standard transports.
+
+A2A provides a standard way for remote agents to discover capabilities and collaborate without exposing their internal state/tools.
+
+Most importantly, HarnessX already explicitly combines harness composition, model routing, plugins, benchmark adapters, RL trajectories, harness evolution and a community hub.
+
+Therefore:
+
+DO NOT build:
+
+    "another agent framework"
+
+DO NOT build:
+
+    "LangGraph but smaller"
+
+DO NOT build:
+
+    "another plugin-based agent SDK"
+
+DO NOT build:
+
+    "another LLM router"
+
+Instead build:
+
+    "an adaptive runtime that schedules computation across
+     models, tools, agents and harnesses according to live task state."
+
+That is the core differentiation.
+
+---
+
+# 2. Core research thesis
+
+The research thesis should be:
+
+> Agent execution should be treated as a sequential decision problem rather than a fixed workflow.
+
+A conventional agent:
+
+    prompt
+      ↓
+    model
+      ↓
+    tool
+      ↓
+    model
+      ↓
+    tool
+      ↓
+    answer
+
+Our runtime:
+
+    prompt
+      ↓
+    state estimator
+      ↓
+    decision model
+      ↓
+    policy
+      ↓
+    best action
+      ↓
+    observation
+      ↓
+    state update
+      ↓
+    decision model
+      ↓
+    best action
+      ↓
+    ...
+
+The optimal action can change after every observation.
+
+---
+
+# 3. The key innovation
+
+The runtime should route **execution**, not just models.
+
+The candidate action space should include:
+
+    MODEL_CALL
+    TOOL_CALL
+    RETRIEVAL
+    MEMORY_LOOKUP
+    MEMORY_COMPACTION
+    SPECIALIST_AGENT
+    DIFFERENT_HARNESS
+    PARALLEL_BRANCH
+    VERIFY
+    RETRY
+    HUMAN_APPROVAL
+    TERMINATE
+
+This creates a much richer routing problem.
+
+Example:
+
+    "Migrate Flask application to FastAPI"
+
+Step 1:
+    cheap local model → inspect repository
+
+Step 2:
+    deterministic AST/dependency analysis
+
+Step 3:
+    decision model
+
+    migration_complexity = 0.87
+
+Step 4:
+    coding agent
+
+Step 5:
+    tests
+
+Step 6:
+    decision model
+
+    failure_probability = 0.72
+
+Step 7:
+    debugger specialist
+
+Step 8:
+    retrieve framework migration knowledge
+
+Step 9:
+    coding agent
+
+Step 10:
+    verification
+
+Step 11:
+    deployment/canary agent
+
+Another task:
+
+    "Add a health endpoint"
+
+could become:
+
+    cheap model
+      ↓
+    edit
+      ↓
+    test
+      ↓
+    done
+
+Same runtime.
+
+Different execution strategy.
+
+---
+
+# 4. This should become the defining product primitive
+
+Define:
+
+    ActionCandidate
+
+with fields roughly equivalent to:
+
+    action_id
+    type
+    provider
+    capability
+    estimated_cost
+    estimated_latency
+    expected_success
+    risk
+    required_permissions
+    required_context
+    input_schema
+    output_schema
+
+The decision engine evaluates a set of candidates.
+
+For example:
+
+    candidates:
+
+      1. local_4b
+      2. local_14b
+      3. coding_agent
+      4. browser_agent
+      5. static_analyzer
+      6. verifier
+      7. human
+
+Then the policy chooses.
+
+This is the central object of the whole runtime.
+
+---
+
+# 5. Jev-style models become decision backends
+
+Do not make Jev mandatory.
+
+Create:
+
+    DecisionModel
+
+interface.
+
+Possible implementations:
+
+    Heuristic
+    SemIf
+    Von
+    Laya
+    Kev
+    Nimble
+    NanoJev
+    RouteLLM
+    DIO-DM
+    Jev adapter
+
+The current open-source ecosystem now contains several Jev-inspired approaches, including Von, Kev, Laya, Nimble, SemIf and NanoJev. Their architectures differ substantially, which makes them useful as an experimental family rather than a dependency you have to pick in advance.
+
+The DataCamp survey also emphasizes that these projects differ in their architecture, parameter count and approach to typed decisions, while noting that the ecosystem is extremely young. Therefore the runtime should abstract over them rather than assume one is universally superior. 
+
+The decision interface should be:
+
+    state
+      +
+    question/schema
+      ↓
+    probabilities
+
+For example:
+
+    should_use_coding_agent?
+        YES: 0.82
+        NO:  0.18
+
+    should_verify?
+        YES: 0.91
+        NO:  0.09
+
+    candidate_harness:
+        OpenHands: 0.62
+        custom:    0.23
+        LangGraph: 0.15
+
+The runtime then applies deterministic policy constraints.
+
+---
+
+# 6. Extremely important separation
+
+Never let the decision model directly execute actions.
+
+Correct:
+
+    Decision model
+        ↓
+    Policy engine
+        ↓
+    Capability/security check
+        ↓
+    Scheduler
+        ↓
+    Executor
+
+Incorrect:
+
+    LLM
+      ↓
+    kubectl / shell / browser / deployment
+
+The decision model predicts.
+
+The policy decides.
+
+The executor acts.
+
+The verifier validates.
+
+This separation is central to making the system trustworthy.
+
+---
+
+# 7. The novel features to pursue
+
+These are the areas that can differentiate the project from HarnessX and other runtimes.
+
+## A. Step-level adaptive routing
+
+Most routing asks:
+
+    Which model should answer this?
+
+Your runtime asks:
+
+    What action should happen next?
+
+This is the main contribution.
+
+---
+
+## B. Harness switching
+
+An agent can change execution environment mid-task.
+
+Example:
+
+    custom lightweight harness
+          ↓
+    task gets difficult
+          ↓
+    switch to OpenHands
+          ↓
+    coding problem solved
+          ↓
+    return to lightweight harness
+          ↓
+    verifier
+
+This is much more interesting than model switching.
+
+Existing frameworks generally let you choose/compose the harness up front. Your runtime can make that choice dynamically.
+
+---
+
+## C. Verifier routing
+
+Do not always use the same verifier.
+
+The runtime chooses:
+
+    deterministic test
+    static analysis
+    unit test
+    schema validator
+    small judge
+    large judge
+    second model
+    human
+
+depending on risk.
+
+Example:
+
+    trivial JSON transformation
+        → schema validator
+
+    financial calculation
+        → deterministic calculator + verifier
+
+    code migration
+        → test suite + independent agent
+
+This turns verification into another decision problem.
+
+---
+
+## D. Failure-directed escalation
+
+When something fails, don't blindly retry.
+
+Classify the failure:
+
+    tool failure
+    environment failure
+    reasoning failure
+    context failure
+    model failure
+    permission failure
+    ambiguous task
+
+Then route accordingly.
+
+Example:
+
+    test failure
+       ↓
+    decision model
+       ↓
+    likely context failure = 0.82
+       ↓
+    retrieve missing dependency documentation
+       ↓
+    retry
+
+versus:
+
+    test failure
+       ↓
+    likely code reasoning failure = 0.79
+       ↓
+    coding specialist
+       ↓
+    retry
+
+This is a strong differentiator.
+
+---
+
+# 8. Compute economics
+
+Every action should have an estimated cost.
+
+For model:
+
+    token cost
+
+For tool:
+
+    API cost
+
+For browser:
+
+    browser time
+
+For agent:
+
+    model + tool cost
+
+For human:
+
+    expensive
+
+For infrastructure:
+
+    GPU time
+
+Now the runtime can optimize:
+
+    probability_of_success
+    ----------------------
+    expected_cost + latency_penalty
+
+This gives the runtime a common economic language across heterogeneous actions.
+
+---
+
+# 9. Execution budget
+
+Every task receives:
+
+    token_budget
+    dollar_budget
+    time_budget
+    action_budget
+    tool_budget
+    risk_budget
+
+Example:
+
+    Task budget:
+
+        $0.50
+        4 minutes
+        30 actions
+
+The runtime may choose:
+
+    cheap model
+
+until confidence drops.
+
+Then spend:
+
+    $0.15
+
+on a stronger specialist.
+
+Then verify.
+
+This creates a very clean research concept:
+
+> Adaptive intelligence under a computation budget.
+
+---
+
+# 10. RL formulation
+
+Use RL lightly but meaningfully.
+
+The runtime is naturally a sequential decision process.
+
+State:
+
+    current task state
+    previous actions
+    observations
+    confidence
+    remaining budget
+    model availability
+    tool availability
+    historical success
+    context size
+    elapsed time
+
+Action:
+
+    model
+    tool
+    subagent
+    harness
+    verifier
+    retry
+    parallelize
+    terminate
+
+Reward:
+
+    successful task
+      - cost
+      - latency
+      - unnecessary actions
+      - failure penalties
+
+For example:
+
+    R =
+        success
+        - λ(cost)
+        - μ(latency)
+        - η(failed_actions)
+
+The first algorithms should be:
+
+    heuristic
+    LinUCB
+    contextual Thompson Sampling
+
+Do NOT start with PPO.
+
+---
+
+# 11. A very interesting RL extension
+
+Use the agent trajectory as a source of training data.
+
+Example:
+
+    state S1
+      ↓
+    action A1
+      ↓
+    observation O1
+      ↓
+    state S2
+      ↓
+    action A2
+      ↓
+    success
+
+Store:
+
+    (S1, A1, reward)
+    (S2, A2, reward)
+
+Then train the policy offline.
+
+Eventually:
+
+    production trajectories
+        ↓
+    de-identification
+        ↓
+    trajectory dataset
+        ↓
+    offline policy evaluation
+        ↓
+    policy update
+        ↓
+    shadow
+        ↓
+    canary
+        ↓
+    online
+
+This becomes the data flywheel.
+
+---
+
+# 12. Counterfactual replay
+
+This is one of the features I would push especially hard.
+
+Suppose the runtime did:
+
+    S
+     ↓
+    A = coding agent
+     ↓
+    success
+
+The system should ask:
+
+    "What would have happened if we had used
+     the smaller model?"
+
+or:
+
+    "What if we had run static analysis first?"
+
+Store alternative outcomes where possible.
+
+Use cached outputs and benchmark traces to estimate:
+
+    action value
+
+This gives you:
+
+> counterfactual policy evaluation for agent execution.
+
+That is much more interesting than merely logging traces.
+
+Be careful about scientific claims here; actual causal/counterfactual inference requires assumptions and should not be overstated. The first implementation can be offline replay rather than claiming causal certainty.
+
+---
+
+# 13. Execution Graph Rewriting
+
+Represent workflows as an intermediate representation:
+
+    TaskGraph
+
+Example:
+
+    PLAN
+      ↓
+    RESEARCH
+      ↓
+    CODE
+      ↓
+    TEST
+      ↓
+    VERIFY
+
+During execution the runtime can rewrite it:
+
+    PLAN
+      ↓
+    STATIC_ANALYSIS
+      ↓
+    RESEARCH
+      ↓
+    CODE
+      ↓
+    TARGETED_TEST
+      ↓
+    DEBUG_AGENT
+      ↓
+    CODE
+      ↓
+    FULL_TEST
+      ↓
+    VERIFY
+
+The runtime should be able to:
+
+    add node
+    remove node
+    replace node
+    branch
+    merge
+    retry
+    parallelize
+    switch agent
+    switch model
+
+This is the "compiler/runtime" aspect.
+
+---
+
+# 14. Plugin system
+
+Plugins are essential.
+
+There should be several plugin categories.
+
+## Model plugins
+
+    OpenAI
+    Anthropic
+    Gemini
+    OpenRouter
+    vLLM
+    SGLang
+    Ollama
+    local transformers
+
+## Decision-model plugins
+
+    Jev
+    Kev
+    Laya
+    Von
+    Nimble
+    NanoJev
+    RouteLLM
+    custom
+
+## Tool plugins
+
+    browser
+    filesystem
+    shell
+    GitHub
+    Slack
+    Jira
+    PostgreSQL
+    web search
+    Python
+    Kubernetes
+    Terraform
+
+## Agent plugins
+
+    OpenHands
+    LangGraph
+    OpenAI Agents SDK
+    Google ADK
+    custom HTTP agent
+    A2A remote agent
+
+## Memory plugins
+
+    local filesystem
+    PostgreSQL
+    vector DB
+    graph DB
+    custom
+
+## Evaluator plugins
+
+    unit tests
+    exact match
+    JSON validator
+    code tests
+    LLM judge
+    human review
+
+## Environment plugins
+
+    Docker
+    Kubernetes
+    browser
+    SWE-bench environment
+    custom sandbox
+
+## Policy plugins
+
+    heuristic
+    LinUCB
+    Thompson Sampling
+    custom learned policy
+
+## Observability plugins
+
+    OpenTelemetry
+    Prometheus
+    custom exporters
+
+---
+
+# 15. Use standards instead of inventing protocols
+
+This is extremely important for adoption.
+
+Use:
+
+    MCP
+    A2A
+    OpenAI-compatible API
+    OpenTelemetry
+    OCI
+    gRPC
+    HTTP/WebSocket
+
+MCP is already the standard mechanism for exposing tools/resources/prompts across agent applications, and its Python SDK v2 supports the July 2026 specification.
+
+A2A should be used for remote agents rather than inventing another agent-to-agent protocol. A2A explicitly supports discovery, streaming, asynchronous tasks and structured data exchange.
+
+Therefore:
+
+    MCP = tool/plugin interoperability
+
+    A2A = remote-agent interoperability
+
+    gRPC = internal runtime communication
+
+    HTTP = public API
+
+---
+
+# 16. Plugin manifest
+
+Every plugin should publish machine-readable metadata.
+
+Example:
+
+    apiVersion: runtime.ai/v1
+
+    name: openhands-coder
+    type: agent
+
+    capabilities:
+      - code_editing
+      - terminal
+      - testing
+
+    economics:
+      estimated_latency_ms: 3000
+      estimated_cost_usd: 0.04
+
+    requirements:
+      - filesystem
+      - shell
+
+    risk:
+      level: high
+
+    permissions:
+      write_workspace: true
+      network: false
+
+    interface:
+      protocol: grpc
+
+This information is available to the decision layer.
+
+Now routing can consider not only:
+
+    "Is this model capable?"
+
+but:
+
+    "Is this capability worth its cost/risk/latency?"
+
+---
+
+# 17. Plugin isolation
+
+There should be three plugin execution modes.
+
+### In-process
+
+For trusted lightweight plugins.
+
+### Worker process
+
+For Python/third-party plugins.
+
+### Sandbox
+
+For untrusted code/tools.
+
+For sandboxing, support:
+
+    Docker
+    gVisor where available
+    WASM/WASI for suitable deterministic plugins
+
+Do not attempt to implement a complete sandbox yourself.
+
+---
+
+# 18. The universal harness adapter
+
+This is one of the biggest pieces.
+
+Create:
+
+    HarnessAdapter
+
+Interface:
+
+    start(task, state)
+    step(...)
+    pause(...)
+    resume(...)
+    interrupt(...)
+    inspect(...)
+    terminate(...)
+    collect_trajectory(...)
+
+Implement adapters for:
+
+    native runtime
+    OpenHands
+    LangGraph
+    OpenAI Agents SDK
+    Google ADK
+    A2A remote agent
+
+The key point:
+
+**You don't replace these frameworks.**
+
+You orchestrate them.
+
+For example:
+
+    Mosaic/Adaptive Runtime
+           ↓
+       LangGraph
+           ↓
+       research agent
+
+then later:
+
+    Adaptive Runtime
+           ↓
+       OpenHands
+           ↓
+       coding agent
+
+The underlying harness remains responsible for its internal agent loop.
+
+The adaptive runtime is the outer scheduler.
+
+---
+
+# 19. This is the real differentiator from HarnessX
+
+HarnessX already treats the harness as composable and evolvable, and already has an evolution loop around harness configuration.
+
+Do not compete with it on:
+
+    number of processors
+    number of bundles
+    prompt composition
+    static harness evolution
+
+Compete on:
+
+    runtime-level task adaptation
+    cross-harness execution
+    action-level economics
+    live model/tool/harness switching
+    verifier routing
+    failure-directed escalation
+    counterfactual replay
+    budget-aware execution
+    online policy learning
+
+That's the moat.
+
+---
+
+# 20. The runtime should be an "execution OS"
+
+The best mental model is:
+
+    Operating System
+    ─────────────────────
+    application
+       ↓
+    scheduler
+       ↓
+    CPU / GPU
+       ↓
+    memory
+       ↓
+    I/O
+
+    Agent Runtime
+    ─────────────────────
+    task
+       ↓
+    intelligence scheduler
+       ↓
+    model / tool / agent
+       ↓
+    context / memory
+       ↓
+    environment
+       ↓
+    verifier
+
+Your runtime schedules **intelligence**.
+
+That is the positioning.
+
+---
+
+# 21. High-Level Architecture
+
+Use these planes.
+
+## Control Plane
+
+    API
+    configuration
+    policies
+    budgets
+    plugin registry
+    model registry
+    authentication
+    tenants
+
+## Execution Plane
+
+    scheduler
+    state machine
+    action executor
+    worker manager
+    harness adapters
+    tool execution
+    sandbox
+
+## Intelligence Plane
+
+    decision models
+    learned policies
+    model router
+    action value estimator
+    uncertainty
+    context optimizer
+
+## Evaluation Plane
+
+    benchmark runner
+    replay
+    quality evaluator
+    trajectory evaluator
+    calibration
+    policy evaluation
+
+## Observability Plane
+
+    OpenTelemetry
+    metrics
+    traces
+    cost
+    event store
+
+## Developer Plane
+
+    SDK
+    CLI
+    plugin registry
+    local runtime
+    examples
+
+---
+
+# 22. HLD
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                    DEVELOPER / APP                      │
+    │                                                         │
+    │ SDK · CLI · REST · MCP · A2A                           │
+    └─────────────────────────────┬───────────────────────────┘
+                                  │
+                                  ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │                    CONTROL PLANE                        │
+    │                                                         │
+    │ Task API · Auth · Policy · Budget · Registry            │
+    └─────────────────────────────┬───────────────────────────┘
+                                  │
+                                  ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │                  EXECUTION KERNEL                       │
+    │                                                         │
+    │ State Machine                                           │
+    │ Scheduler                                               │
+    │ Action Planner                                          │
+    │ Constraint Engine                                      │
+    │ Budget Manager                                          │
+    └────────────┬───────────────────────┬────────────────────┘
+                 │                       │
+                 ▼                       ▼
+    ┌──────────────────────┐   ┌────────────────────────────┐
+    │   DECISION ENGINE    │   │     CANDIDATE REGISTRY     │
+    │                      │   │                            │
+    │ Jev-style models    │   │ models                     │
+    │ heuristics           │   │ tools                      │
+    │ learned policies     │   │ agents                     │
+    │ uncertainty          │   │ harnesses                  │
+    └────────────┬─────────┘   │ verifiers                  │
+                 │             └────────────┬───────────────┘
+                 └──────────────┬───────────┘
+                                │
+                                ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │                   ACTION SCHEDULER                      │
+    │                                                         │
+    │ choose model / tool / agent / harness / verifier       │
+    │ subject to cost + risk + capability + SLO              │
+    └─────────────────────────────┬───────────────────────────┘
+                                  │
+                    ┌─────────────┼──────────────┐
+                    │             │              │
+                    ▼             ▼              ▼
+                MODEL         TOOL          HARNESS
+                WORKER        WORKER        WORKER
+                    │             │              │
+                    └─────────────┼──────────────┘
+                                  │
+                                  ▼
+                           OBSERVATION
+                                  │
+                                  ▼
+                         ┌────────────────┐
+                         │ STATE STORE    │
+                         │                │
+                         │ checkpoints    │
+                         │ trajectory     │
+                         │ memory         │
+                         └───────┬────────┘
+                                 │
+                                 ▼
+                         DECISION AGAIN
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                 EVALUATION + LEARNING                   │
+    │                                                         │
+    │ Replay · Benchmarks · Quality · RL · Calibration        │
+    └───────────────────────────┬─────────────────────────────┘
+                                │
+                                ▼
+                         POLICY UPDATES
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                   OBSERVABILITY                          │
+    │                                                         │
+    │ OpenTelemetry · Prometheus · ClickHouse · Grafana       │
+    └─────────────────────────────────────────────────────────┘
+
+---
+
+# 23. Low-Level Architecture
+
+Use these core abstractions.
+
+## Task
+
+    TaskSpec
+
+Fields:
+
+    id
+    objective
+    inputs
+    constraints
+    budget
+    capabilities
+    risk_policy
+    initial_context
+
+## State
+
+    ExecutionState
+
+Fields:
+
+    task_id
+    run_id
+    step_id
+    messages
+    variables
+    observations
+    active_agents
+    available_tools
+    budget_remaining
+    elapsed_time
+    confidence
+    trajectory_summary
+
+## Action
+
+    ActionCandidate
+
+Fields:
+
+    id
+    type
+    target
+    input
+    expected_success
+    expected_cost
+    expected_latency
+    risk
+    capabilities
+    permissions
+
+## Decision
+
+    PolicyDecision
+
+Fields:
+
+    selected_action
+    probabilities
+    confidence
+    rationale_metadata
+    policy_version
+    decision_model
+    estimated_cost
+    estimated_latency
+
+Do not require natural-language rationale.
+
+---
+
+# 24. State Machine
+
+The core runtime should be explicit.
+
+    CREATED
+       ↓
+    INITIALIZING
+       ↓
+    PLANNING
+       ↓
+    EXECUTING
+       ↓
+    OBSERVING
+       ↓
+    DECIDING
+       ↓
+    VERIFYING
+       ↓
+    SUCCEEDED
+
+Alternative transitions:
+
+    EXECUTING → WAITING
+    EXECUTING → FAILED
+    FAILED → RECOVERING
+    RECOVERING → EXECUTING
+    EXECUTING → HUMAN_APPROVAL
+    HUMAN_APPROVAL → EXECUTING
+    HUMAN_APPROVAL → TERMINATED
+
+Long-running execution must be resumable.
+
+Every state transition must be persisted.
+
+---
+
+# 25. Event model
+
+Every meaningful runtime event should be emitted.
+
+Examples:
+
+    RunCreated
+    StepStarted
+    DecisionMade
+    ActionDispatched
+    ToolStarted
+    ToolFinished
+    ModelStarted
+    ModelFinished
+    HarnessStarted
+    HarnessFinished
+    VerificationStarted
+    VerificationFinished
+    BudgetUpdated
+    PolicyUpdated
+    HumanApprovalRequested
+    ExperimentStarted
+    ExperimentFinished
+    RollbackTriggered
+    RunSucceeded
+    RunFailed
+
+Use an append-only event model.
+
+This allows:
+
+    replay
+    debugging
+    audit
+    training data
+    research
+    analytics
+
+---
+
+# 26. Persistence
+
+Use different storage according to workload.
+
+## PostgreSQL
+
+Durable runtime state:
+
+    tasks
+    runs
+    steps
+    policies
+    plugins
+    models
+    users
+    approvals
+    experiments
+
+## ClickHouse
+
+High-volume telemetry:
+
+    action_events
+    model_calls
+    latency
+    token usage
+    costs
+    trajectories
+    evaluation results
+
+## Object storage
+
+    datasets
+    long traces
+    screenshots
+    artifacts
+    model outputs
+    benchmark results
+
+## Redis
+
+    hot state
+    queues where appropriate
+    locks
+    caches
+
+---
+
+# 27. Language choice
+
+Do NOT make the whole project Python.
+
+Do NOT make the whole project Go.
+
+Use a hybrid architecture.
+
+# Go = runtime kernel
+
+Use Go for:
+
+    scheduler
+    execution state machine
+    worker manager
+    plugin supervisor
+    event processing
+    RPC server
+    quotas
+    budget accounting
+    concurrency
+    sandbox orchestration
+    MCP/A2A gateway
+    high-volume telemetry ingestion
+
+Why:
+
+    concurrency
+    predictable memory
+    deployment simplicity
+    static binary
+    good networking
+    excellent Kubernetes ecosystem
+    easy long-running service management
+
+You also gain genuine systems/SDE credibility.
+
+---
+
+# 28. Python = intelligence SDK
+
+Use Python for:
+
+    agent definitions
+    model adapters
+    decision models
+    RL
+    training
+    evaluation
+    LangGraph integration
+    OpenHands integration
+    Hugging Face
+    PyTorch
+    benchmark adapters
+
+This matches the ML/agent ecosystem.
+
+The two communicate over:
+
+    gRPC
+
+with versioned protobuf contracts.
+
+---
+
+# 29. TypeScript = later
+
+Add TypeScript after the core system works.
+
+Use it for:
+
+    web SDK
+    browser integrations
+    dashboard
+    Node/Bun plugins
+
+Do not build three SDKs in v1.
+
+---
+
+# 30. Why the Go/Python split is actually valuable
+
+The architecture becomes:
+
+    Python application
+          ↓
+    Python SDK
+          ↓
+    gRPC
+          ↓
+    Go Runtime
+          ↓
+    scheduler
+          ↓
+    workers
+          ↓
+    Python model/agent workers
+
+This lets the coding agent demonstrate:
+
+    Python
+    Go
+    distributed systems
+    RPC
+    async execution
+    ML
+    RL
+
+without forcing everything into one language.
+
+---
+
+# 31. gRPC contract
+
+Core services:
+
+    RuntimeService
+    DecisionService
+    WorkerService
+    PluginService
+    EvaluationService
+    TelemetryService
+
+Example:
+
+    RunTask(TaskSpec)
+        → RunHandle
+
+    GetRun(run_id)
+        → ExecutionState
+
+    SubmitDecision(...)
+        → PolicyDecision
+
+    ExecuteAction(...)
+        → ActionResult
+
+    PauseRun(...)
+    ResumeRun(...)
+    CancelRun(...)
+
+Everything should be versioned.
+
+---
+
+# 32. Local mode
+
+This is critical for GitHub adoption.
+
+The entire system should work locally.
+
+One command:
+
+    runtime serve
+
+No Kubernetes.
+
+No Postgres required.
+
+No cloud account.
+
+Use:
+
+    embedded SQLite
+    local event store
+    local worker processes
+    Ollama / llama.cpp / local vLLM
+
+The local runtime becomes the easiest entry point.
+
+---
+
+# 33. Distributed mode
+
+Later:
+
+    Go Runtime
+        ↓
+    Redis/NATS
+        ↓
+    worker fleet
+        ↓
+    model servers
+        ↓
+    agents
+        ↓
+    sandboxes
+
+For the first distributed version, NATS or Redis Streams is enough.
+
+Introduce Kafka/Redpanda only when workload justifies it.
+
+---
+
+# 34. Kubernetes
+
+Production deployment:
+
+    runtime-api
+    runtime-scheduler
+    runtime-workers
+    decision-server
+    evaluation-workers
+    agent-workers
+    telemetry
+    postgres
+    clickhouse
+    redis
+    object-store
+
+Inference:
+
+    vLLM
+    SGLang
+    other providers
+
+Do not make Kubernetes mandatory.
+
+---
+
+# 35. Agent framework integrations
+
+First-class adapters:
+
+    OpenHands
+    LangGraph
+    OpenAI Agents SDK
+    Google ADK
+
+The adapter should expose:
+
+    start
+    execute
+    pause
+    resume
+    interrupt
+    inspect
+    collect_trajectory
+    terminate
+
+The user can therefore say:
+
+    "Use OpenHands for this coding subtask."
+
+or the runtime can decide it automatically.
+
+---
+
+# 36. MCP integration
+
+DIO's existing MCP work should be reused.
+
+Expose the runtime through MCP too.
+
+Examples:
+
+    runtime.run_task
+    runtime.get_run
+    runtime.pause_run
+    runtime.resume_run
+    runtime.inspect_trajectory
+    runtime.run_benchmark
+    runtime.compare_harnesses
+
+This allows external agents to control your runtime.
+
+---
+
+# 37. A2A integration
+
+Treat remote agents as:
+
+    RemoteAgentPlugin
+
+The runtime should discover:
+
+    capabilities
+    modalities
+    task types
+    authentication requirements
+    endpoint
+
+Then:
+
+    local runtime
+         ↓
+    A2A agent
+         ↓
+    result
+
+This makes your system genuinely cross-framework.
+
+---
+
+# 38. Decision engine
+
+The decision service should be independently deployable.
+
+    POST /decide
+
+Input:
+
+    state
+    candidate_actions
+    decision_schema
+
+Output:
+
+    action probabilities
+    confidence
+    decision metadata
+
+Model adapters:
+
+    heuristic
+    Von
+    Kev
+    Laya
+    Nimble
+    NanoJev
+    SemIf
+    RouteLLM
+    DIO-DM
+
+This gives you an entire decision-model benchmark lab.
+
+---
+
+# 39. Decision benchmark
+
+Build:
+
+    runtime decision-benchmark
+
+Output:
+
+    MODEL        LATENCY    MEMORY    ACCURACY    ECE
+    -------------------------------------------------
+    heuristic
+    Von
+    Kev-0.8B
+    Kev-4B
+    Laya
+    NanoJev
+    RouteLLM
+    DIO-DM
+
+Do not publish invented numbers.
+
+All results must be reproducible.
+
+---
+
+# 40. Calibration
+
+For decision models measure:
+
+    ECE
+    Brier score
+    reliability
+    risk-coverage
+    confidence vs correctness
+
+This is important because the runtime relies on probabilities to determine escalation.
+
+The runtime must know whether:
+
+    0.90
+
+actually corresponds to approximately:
+
+    90% correctness
+
+on its workload.
+
+---
+
+# 41. Context optimizer
+
+Add another runtime component:
+
+    ContextManager
+
+It decides:
+
+    retrieve
+    summarize
+    compact
+    expand
+    discard
+    preserve
+
+This is another action dimension.
+
+Example:
+
+    20K token context
+        ↓
+    decision model
+        ↓
+    "relevant_context = 5K"
+        ↓
+    context compiler
+        ↓
+    model
+
+This reduces both cost and latency.
+
+---
+
+# 42. Memory
+
+Use three levels.
+
+## Working memory
+
+Current step/state.
+
+## Episodic memory
+
+Past trajectories.
+
+## Long-term memory
+
+Reusable knowledge/experience.
+
+The runtime should be able to choose:
+
+    retrieve memory
+    don't retrieve
+    compact memory
+    save experience
+
+instead of forcing retrieval every time.
+
+---
+
+# 43. Experience store
+
+Store successful patterns:
+
+    task class
+    state pattern
+    successful action sequence
+    cost
+    failure points
+    final outcome
+
+Then future tasks can query:
+
+    "Have we seen something like this?"
+
+This creates an experience-based policy.
+
+---
+
+# 44. Harness profiles
+
+Users should be able to declare:
+
+    CodingHarness
+    ResearchHarness
+    BrowserHarness
+    DataHarness
+    MigrationHarness
+    DeepResearchHarness
+
+But each profile is only a candidate.
+
+The runtime can still switch away from it if the task state changes.
+
+---
+
+# 45. Harness configuration language
+
+Create a declarative format.
+
+Example:
+
+    harness:
+      name: coding
+
+      models:
+        planner: qwen-14b
+        coder: qwen-32b
+        verifier: qwen-8b
+
+      tools:
+        - filesystem
+        - git
+        - tests
+
+      policies:
+        max_steps: 40
+        max_cost_usd: 2.00
+
+      verification:
+        required: true
+
+This makes harnesses portable.
+
+---
+
+# 46. Harness marketplace
+
+This should eventually be a major open-source growth mechanism.
+
+Users publish:
+
+    coding-agent@1.0
+    deep-research@2.1
+    migration@0.4
+    browser-research@1.3
+    data-analysis@0.9
+
+The runtime downloads:
+
+    manifest
+    configuration
+    plugin dependencies
+
+and validates versions.
+
+Don't copy HarnessX's exact implementation.
+
+Your differentiator is that the runtime can dynamically choose among these harnesses.
+
+---
+
+# 47. Benchmark strategy
+
+Do not create one benchmark only.
+
+Use multiple benchmark families.
+
+## Software engineering
+
+SWE-bench.
+
+SWE-bench currently offers Full, Lite, Verified, Multimodal and Multilingual datasets, and its evaluation infrastructure is containerized for reproducibility.
+
+Start with:
+
+    SWE-bench Lite
+    SWE-bench Verified
+
+then scale.
+
+## Terminal tasks
+
+Terminal-style benchmarks.
+
+## General agents
+
+GAIA-style tasks.
+
+## Web agents
+
+Web interaction benchmarks.
+
+## Your own benchmark
+
+This is very important.
+
+Create:
+
+# Adaptive Execution Benchmark
+
+Every task should contain:
+
+    task
+    candidate tools
+    candidate models
+    candidate agents
+    candidate harnesses
+    budget
+    deterministic evaluator
+
+Then compare runtimes.
+
+---
+
+# 48. Benchmark the HARNESSES, not just models
+
+This is one of the strongest research angles.
+
+Recent analysis of public benchmark results found large same-model/different-harness differences, with a median gap of roughly 16 percentage points across a collection of same-model harness pairs. Treat such third-party analyses as evidence that the question matters, not as universal measurements; the exact effect depends strongly on benchmark and environment.
+
+Your experiment should control:
+
+    same model
+    same task
+    same tools
+    same environment
+
+Change:
+
+    harness/runtime only
+
+Then measure:
+
+    success
+    cost
+    latency
+    tool calls
+    failures
+    recovery
+    trajectory length
+
+There are also current studies explicitly questioning when harness engineering produces measurable gains and emphasizing that benefits may depend on task horizon.
+
+That uncertainty is actually useful: your benchmark should investigate it rather than assume the answer.
+
+---
+
+# 49. Your flagship benchmark
+
+Call it something like:
+
+# Agent Execution Efficiency Benchmark
+
+For a fixed task:
+
+    Model = constant
+
+Compare:
+
+    baseline harness
+    OpenHands
+    LangGraph
+    OpenAI SDK
+    Google ADK
+    adaptive runtime
+
+Then:
+
+    same task
+    different action-routing policies
+
+Compare:
+
+    static
+    heuristic
+    Jev-style
+    DIO-DM
+    bandit
+
+This isolates:
+
+    model effect
+    harness effect
+    routing effect
+    policy effect
+
+That can become a legitimate research artifact.
+
+---
+
+# 50. Ablation studies
+
+You need:
+
+    Adaptive Runtime
+
+vs
+
+    Runtime - decision model
+    Runtime - adaptive routing
+    Runtime - RL
+    Runtime - memory
+    Runtime - verification routing
+    Runtime - harness switching
+    Runtime - budget optimization
+
+This is how you demonstrate which components actually help.
+
+---
+
+# 51. One very important benchmark metric
+
+Don't just report:
+
+    task success %
+
+Also report:
+
+    success / dollar
+
+and:
+
+    success / minute
+
+and:
+
+    success / 1K tokens
+
+and:
+
+    successful tasks / tool calls
+
+This tells the story of **efficient agent execution**.
+
+---
+
+# 52. Another major metric
+
+Measure:
+
+# Intelligence Utilization
+
+Conceptually:
+
+    useful progress
+    ----------------
+    total computation
+
+Approximate useful progress using:
+
+    successful state transitions
+    verified intermediate outcomes
+    completed subtasks
+
+versus:
+
+    wasted calls
+    retries
+    redundant retrieval
+    unnecessary model escalation
+
+This is a research metric you can define and validate rather than presenting it as an established industry standard.
+
+---
+
+# 53. Agent trajectory viewer
+
+The dashboard should visualize:
+
+    TASK
+      │
+      ▼
+    STEP 1
+      │
+      ├── Decision
+      │    local model 0.72
+      │    large model 0.18
+      │    tool       0.10
+      │
+      ▼
+    ACTION
+      │
+      ▼
+    OBSERVATION
+      │
+      ▼
+    STEP 2
+      │
+      ├── Decision
+      │    coding agent 0.81
+      │
+      ▼
+    ACTION
+      │
+      ▼
+    ...
+
+This will be one of the most compelling parts of the UI.
+
+---
+
+# 54. Decision debugger
+
+Add:
+
+    Why did the runtime choose this?
+
+Example:
+
+    Selected:
+        OpenHands
+
+    Evidence:
+        coding_complexity = 0.86
+        static_fix_probability = 0.14
+        remaining_budget = $1.20
+
+    Alternatives:
+        Qwen-8B
+        expected success = 0.42
+
+        local tool
+        expected success = 0.18
+
+    Decision policy:
+        maximize success under $1.20 budget
+
+This gives developers trust.
+
+---
+
+# 55. Agent interrupts
+
+The runtime should be able to interrupt an agent if:
+
+    budget exceeded
+    action loop detected
+    repeated identical tool call
+    progress score stalled
+    confidence collapsed
+    policy violated
+    dangerous capability requested
+
+Then:
+
+    stop
+    re-plan
+    switch agent
+    ask human
+    terminate
+
+This is another strong systems feature.
+
+---
+
+# 56. Loop detection
+
+Track:
+
+    tool repetition
+    state similarity
+    action repetition
+    semantic progress
+
+Example:
+
+    same search executed 5 times
+
+→ interrupt.
+
+Or:
+
+    same test fails 4 times
+
+→ change strategy.
+
+This can save huge amounts of inference.
+
+---
+
+# 57. Parallel execution
+
+The runtime should decide when parallelism is worthwhile.
+
+Example:
+
+    research:
+        query source A
+        query source B
+        query source C
+
+could run concurrently.
+
+But:
+
+    code → compile → test
+
+must remain sequential.
+
+The scheduler determines this based on dependencies.
+
+---
+
+# 58. Dependency-aware execution graph
+
+Every action should expose:
+
+    reads
+    writes
+    dependencies
+
+Then the runtime can determine:
+
+    can_parallelize(actionA, actionB)
+
+This gives the Go scheduler a real systems problem.
+
+---
+
+# 59. Resource scheduler
+
+The scheduler should account for:
+
+    CPU
+    GPU
+    memory
+    concurrency
+    model residency
+    browser slots
+    sandbox slots
+
+Example:
+
+    coding agent requires GPU
+    browser agent requires browser
+    static analysis requires CPU
+
+The runtime can schedule according to available capacity.
+
+This makes the project much more than an LLM library.
+
+---
+
+# 60. Local inference
+
+Support:
+
+    Ollama
+    llama.cpp
+    vLLM
+    SGLang
+
+The runtime should not care which engine handles the model.
+
+Model endpoint metadata:
+
+    capability
+    latency
+    price
+    hardware
+    context length
+    concurrency
+    availability
+
+The scheduler consumes that metadata.
+
+---
+
+# 61. Inference-aware routing
+
+Use actual inference telemetry.
+
+Available signals:
+
+    TTFT
+    generation latency
+    throughput
+    queue depth
+    GPU utilization
+    KV-cache state
+    errors
+
+vLLM exposes production metrics through its serving stack, so these can become scheduler features rather than only dashboard metrics.
+
+---
+
+# 62. Model capability registry
+
+Every model should declare:
+
+    coding
+    reasoning
+    vision
+    structured output
+    tool calling
+    context
+    multilingual
+    latency
+    cost
+
+This allows:
+
+    capability matching
+
+before:
+
+    probabilistic routing
+
+That gives you a hybrid:
+
+    deterministic filtering
+          ↓
+    decision model
+          ↓
+    learned policy
+
+---
+
+# 63. Policy hierarchy
+
+There should be four levels.
+
+## Hard constraints
+
+    security
+    permissions
+    max budget
+    disallowed tools
+
+## Deterministic policy
+
+    explicit user rules
+
+## Learned policy
+
+    RL/bandit
+
+## Model prediction
+
+    Jev-style probabilities
+
+Final decision:
+
+    hard constraints
+       ↓
+    policy
+       ↓
+    learned policy
+       ↓
+    decision probability
+       ↓
+    action
+
+Never let learned policy override hard constraints.
+
+---
+
+# 64. Human-in-the-loop
+
+Human approval should itself be an action.
+
+Candidate:
+
+    HUMAN_APPROVAL
+
+with:
+
+    estimated human cost
+    risk
+    reason
+    evidence
+
+The runtime can therefore choose:
+
+    cheap model
+
+or:
+
+    human
+
+based on economics/risk.
+
+---
+
+# 65. Example full workflow
+
+Task:
+
+    "Migrate this application from Flask to FastAPI
+     and prepare a deployable PR."
+
+Runtime:
+
+    inspect repository
+        ↓
+    decision model
+        ↓
+    static analysis
+        ↓
+    decision
+        ↓
+    coding harness
+        ↓
+    tests
+        ↓
+    failure
+        ↓
+    failure classifier
+        ↓
+    debugger agent
+        ↓
+    documentation retrieval
+        ↓
+    coding agent
+        ↓
+    tests
+        ↓
+    security scan
+        ↓
+    packaging
+        ↓
+    deployment dry run
+        ↓
+    verifier
+        ↓
+    PR
+
+At each transition, the runtime can choose a different action.
+
+---
+
+# 66. Example simple task
+
+Task:
+
+    "Add /health endpoint."
+
+Runtime:
+
+    inspect
+      ↓
+    local small model
+      ↓
+    patch
+      ↓
+    unit test
+      ↓
+    success
+
+No expensive agent.
+
+No large model.
+
+No multi-agent system.
+
+That is exactly what the product should optimize.
+
+---
+
+# 67. Exact repo structure
+
+    runtime/
+    │
+    ├── cmd/
+    │   └── runtime/
+    │
+    ├── core/
+    │   ├── task/
+    │   ├── state/
+    │   ├── action/
+    │   ├── decision/
+    │   ├── policy/
+    │   ├── scheduler/
+    │   ├── budget/
+    │   └── execution/
+    │
+    ├── plugins/
+    │   ├── registry/
+    │   ├── manifests/
+    │   ├── supervisor/
+    │   └── sandbox/
+    │
+    ├── protocols/
+    │   ├── grpc/
+    │   ├── mcp/
+    │   └── a2a/
+    │
+    ├── workers/
+    │   ├── model/
+    │   ├── tool/
+    │   ├── agent/
+    │   └── evaluator/
+    │
+    ├── storage/
+    │   ├── postgres/
+    │   ├── sqlite/
+    │   └── objectstore/
+    │
+    ├── telemetry/
+    │
+    ├── python-sdk/
+    │   ├── runtime/
+    │   ├── agents/
+    │   ├── models/
+    │   ├── plugins/
+    │   ├── policies/
+    │   ├── rl/
+    │   └── eval/
+    │
+    ├── benchmarks/
+    │   ├── swebench/
+    │   ├── terminal/
+    │   ├── web/
+    │   ├── gaia/
+    │   └── adaptive/
+    │
+    ├── dashboard/
+    │
+    ├── examples/
+    │   ├── coding/
+    │   ├── research/
+    │   ├── migration/
+    │   ├── browser/
+    │   └── multi_agent/
+    │
+    ├── docs/
+    │   ├── architecture/
+    │   ├── plugins/
+    │   ├── policies/
+    │   ├── benchmarks/
+    │   └── research/
+    │
+    └── infra/
+        ├── docker/
+        ├── helm/
+        └── terraform/
+
+---
+
+# 68. Do not use one repository per component
+
+Everything should initially live in one monorepo.
+
+The repository itself should feel like:
+
+    runtime
+       + SDK
+       + plugins
+       + benchmarks
+       + dashboard
+       + deployment
+
+That makes contribution much easier.
+
+---
+
+# 69. CLI
+
+The CLI is critical.
+
+Commands:
+
+    runtime init
+    runtime run
+    runtime resume
+    runtime inspect
+    runtime trace
+    runtime plugins
+    runtime models
+    runtime agents
+    runtime benchmarks
+    runtime replay
+    runtime evaluate
+    runtime policy
+    runtime train
+    runtime compare
+    runtime doctor
+
+The killer command:
+
+    runtime run "migrate this Flask app to FastAPI"
+
+And:
+
+    runtime inspect <run-id>
+
+should show the entire execution trace.
+
+---
+
+# 70. One-command local demo
+
+The user must be able to do:
+
+    git clone ...
+    cd runtime
+    runtime init
+    runtime run "solve this task"
+
+with a local Ollama model.
+
+No account.
+
+No API key.
+
+No Kubernetes.
+
+No external service.
+
+This is essential for open-source adoption.
+
+---
+
+# 71. Configuration philosophy
+
+Do not bury users in YAML.
+
+Default:
+
+    runtime run "..."
+
+Advanced users:
+
+    runtime run \
+      --policy adaptive \
+      --budget 1.00 \
+      --model-policy auto \
+      --harness auto
+
+Power users:
+
+    runtime.yaml
+
+---
+
+# 72. Dashboard
+
+Pages:
+
+## Runs
+
+    active
+    completed
+    failed
+
+## Trajectory
+
+    state
+    decisions
+    actions
+    observations
+
+## Cost
+
+    model cost
+    tool cost
+    agent cost
+    total
+
+## Policies
+
+    routing
+    bandit
+    experiments
+
+## Plugins
+
+    installed
+    health
+    capabilities
+    permissions
+
+## Benchmarks
+
+    task success
+    cost
+    latency
+    comparison
+
+## Models
+
+    capability
+    price
+    latency
+    utilization
+
+---
+
+# 73. Research Lab
+
+The dashboard should have a special section:
+
+# Harness Lab
+
+Select:
+
+    same model
+    same task set
+
+Then compare:
+
+    Harness A
+    Harness B
+    Adaptive runtime
+
+Charts:
+
+    success
+    cost
+    latency
+    tool calls
+    recovery
+    context usage
+
+Then:
+
+# Policy Lab
+
+Compare:
+
+    fixed
+    heuristic
+    DIO-DM
+    bandit
+
+Then:
+
+# Decision Model Lab
+
+Compare:
+
+    Von
+    Kev
+    Laya
+    NanoJev
+    etc.
+
+This turns your GitHub project into a research platform.
+
+---
+
+# 74. Benchmark result format
+
+Every result must contain:
+
+    git commit
+    model revision
+    harness version
+    plugin versions
+    dataset version
+    environment
+    GPU
+    seed
+    policy version
+
+This prevents benchmark ambiguity.
+
+---
+
+# 75. Reproducibility
+
+Provide:
+
+    make benchmark
+
+or:
+
+    runtime benchmark reproduce <run-id>
+
+which regenerates the result.
+
+Store benchmark configurations in git.
+
+Do not upload only charts.
+
+Upload:
+
+    raw JSON
+    aggregate CSV
+    configs
+    scripts
+    logs
+    environment metadata
+
+---
+
+# 76. Security
+
+Security should be a first-class subsystem.
+
+Capabilities:
+
+    filesystem
+    network
+    shell
+    browser
+    git
+    cloud
+
+Every action declares required capabilities.
+
+Example:
+
+    browser_search:
+        network=true
+
+    read_repo:
+        filesystem.read=true
+
+    deploy:
+        kubernetes.write=true
+
+The policy engine checks these before execution.
+
+---
+
+# 77. Capability leases
+
+A particularly useful feature:
+
+Instead of permanently granting permissions, the runtime issues:
+
+    capability lease
+
+Example:
+
+    agent receives:
+
+        filesystem.write
+        repository=/workspace/project
+        duration=10min
+
+Then capability expires.
+
+This gives you much better security semantics for long-running agents.
+
+---
+
+# 78. Risk-aware execution
+
+Each plugin/action declares:
+
+    risk_level
+
+Example:
+
+    read_file      LOW
+    web_search     LOW
+    git_commit     MEDIUM
+    open_pr        MEDIUM
+    cloud_deploy   HIGH
+    production_db  CRITICAL
+
+Policy:
+
+    LOW       autonomous
+    MEDIUM    autonomous with logging
+    HIGH      canary/approval
+    CRITICAL  human approval
+
+This is deterministic.
+
+The RL system cannot bypass it.
+
+---
+
+# 79. Agent health
+
+Track:
+
+    success rate
+    average steps
+    cost
+    latency
+    failure classes
+    tool error rate
+
+Then the runtime can automatically stop using a degraded plugin.
+
+Example:
+
+    OpenHands
+        recent success = 61%
+
+    custom coding agent
+        success = 87%
+
+The runtime adjusts candidate ranking.
+
+---
+
+# 80. Learned capability profiles
+
+Over time:
+
+    "OpenHands works particularly well for
+     repository-scale changes."
+
+    "Small model works well for extraction."
+
+    "Browser agent is weak on dynamic sites."
+
+These become experience data.
+
+This is one place where the learned policy can become genuinely useful.
+
+---
+
+# 81. Self-optimization loop
+
+The finished system should eventually be able to do:
+
+    observe trajectories
+       ↓
+    identify inefficient patterns
+       ↓
+    propose policy modification
+       ↓
+    replay benchmark
+       ↓
+    compare
+       ↓
+    shadow
+       ↓
+    canary
+       ↓
+    accept / reject
+
+Do not let the runtime automatically rewrite its own core code.
+
+Self-optimization should initially modify:
+
+    policy
+    routing weights
+    harness configuration
+    action thresholds
+
+not source code.
+
+---
+
+# 82. Meta-learning later
+
+Once the system has enough trajectories:
+
+    task class
+      ↓
+    historical successful traces
+      ↓
+    initialize policy
+      ↓
+    adapt online
+
+The goal becomes:
+
+> New tasks can start from prior experience rather than beginning from zero.
+
+This is a later research milestone.
+
+---
+
+# 83. Where your DIO work fits
+
+DIO doesn't have to disappear.
+
+You can extract the useful parts:
+
+    model routing
+    inference telemetry
+    SLO awareness
+    latency learning
+    prefix/session affinity
+    vLLM integration
+    MCP
+
+and turn them into plugins for the new runtime.
+
+Conceptually:
+
+    DIO
+      ↓
+    Inference backend/control plugin
+
+Then your existing research gets reused rather than discarded.
+
+Your current DIO already has heterogeneous inference backends, latency learning, affinity, admission and MCP support, so this is a natural extension rather than a completely unrelated codebase.
+
+---
+
+# 84. MigrationOS becomes an application
+
+This is important.
+
+Do NOT make migration logic the entire runtime.
+
+Instead:
+
+    Adaptive Runtime
+         │
+         ├── Migration Harness
+         ├── Coding Harness
+         ├── Research Harness
+         ├── Browser Harness
+         └── Data Harness
+
+Then:
+
+    runtime migrate repo
+
+becomes your spectacular demo.
+
+Migration can leverage deterministic tools such as OpenRewrite where appropriate instead of forcing an LLM to perform every transformation.
+
+The runtime's job is:
+
+    deterministic tool
+    vs
+    coding agent
+    vs
+    specialist
+    vs
+    verifier
+
+That is where the intelligence lies.
+
+---
+
+# 85. First flagship demo
+
+Use:
+
+# "Migrate a real application."
+
+User:
+
+    runtime migrate ./legacy-app \
+      --from flask \
+      --to fastapi
+
+The runtime:
+
+    inspect
+      ↓
+    dependency graph
+      ↓
+    decision
+      ↓
+    deterministic transformations
+      ↓
+    LLM where needed
+      ↓
+    tests
+      ↓
+    debugging
+      ↓
+    verification
+      ↓
+    final PR
+
+Show the trajectory live.
+
+This is far more impressive than:
+
+    "Hello, I built a chatbot."
+
+---
+
+# 86. Second flagship demo
+
+Use SWE-bench.
+
+Run:
+
+    same model
+    same tasks
+
+with:
+
+    baseline agent
+    static harness
+    adaptive runtime
+
+Show:
+
+    success
+    cost
+    latency
+    tool calls
+    recovery
+
+SWE-bench's current evaluation system is containerized and has 500 Verified problems plus other variants, so it is suitable for reproducible agent evaluation.
+
+---
+
+# 87. Third flagship demo
+
+Use a deliberately constrained budget.
+
+Task:
+
+    "Solve this software issue under a $0.25 budget."
+
+Compare:
+
+    static expensive agent
+
+against:
+
+    adaptive runtime
+
+The runtime might:
+
+    small model
+    →
+    static analysis
+    →
+    coding model
+    →
+    targeted tests
+
+rather than:
+
+    frontier model repeatedly
+
+The metric:
+
+    successful tasks / dollar
+
+This is a very clean demonstration.
+
+---
+
+# 88. Fourth flagship demo
+
+Harness switching.
+
+Give one task to:
+
+    Runtime
+
+Then show:
+
+    Local harness
+       ↓
+    LangGraph
+       ↓
+    OpenHands
+       ↓
+    verifier
+
+with each switch driven by task state.
+
+That is the demo I would use when explaining the project's novelty.
+
+---
+
+# 89. Research paper structure
+
+Potential paper:
+
+## Title
+
+"Adaptive Execution Policies for Long-Horizon AI Agents"
+
+or:
+
+"Routing Computation, Not Just Models: Adaptive Execution for Agentic Systems"
+
+## Questions
+
+RQ1:
+
+Does step-level action routing improve task success/cost over fixed workflows?
+
+RQ2:
+
+Can compact probabilistic decision models make useful execution decisions at low latency?
+
+RQ3:
+
+Does learned policy routing improve over static thresholds?
+
+RQ4:
+
+Can dynamic harness switching improve long-horizon task completion?
+
+RQ5:
+
+How much of agent performance comes from the runtime/harness versus the underlying model?
+
+RQ6:
+
+Can adaptive verification reduce wasted computation without increasing unsafe/incorrect completion?
+
+---
+
+# 90. Main experimental matrix
+
+    Model
+        ×
+    Harness
+        ×
+    Decision model
+        ×
+    Policy
+        ×
+    Budget
+
+Example:
+
+    Qwen-14B
+        ×
+    OpenHands
+        ×
+    Von
+        ×
+    LinUCB
+        ×
+    $1
+
+versus:
+
+    Qwen-14B
+        ×
+    OpenHands
+        ×
+    static
+        ×
+    no learned routing
+        ×
+    $1
+
+This gives you a serious experimental framework.
+
+---
+
+# 91. Avoid a common research mistake
+
+Do not claim:
+
+    "Our runtime is better."
+
+Instead say:
+
+    "Under benchmark X, model Y, environment Z,
+     adaptive policy A achieved X success at Y cost."
+
+Everything should be traceable.
+
+---
+
+# 92. Open-source license
+
+For the core runtime:
+
+# Apache-2.0
+
+This is a good fit for infrastructure.
+
+Keep:
+
+    runtime
+    SDK
+    plugin interfaces
+    benchmark tooling
+
+open source.
+
+Potential future paid components:
+
+    hosted control plane
+    managed benchmark execution
+    hosted observability
+    enterprise registry
+    policy management
+    team collaboration
+    managed GPU execution
+
+Do not cripple the OSS runtime just to force a SaaS conversion.
+
+---
+
+# 93. How to actually get stars
+
+Don't market it initially as:
+
+    "my AI research project."
+
+Market it as:
+
+# "Run any agent through an adaptive execution runtime."
+
+The GitHub landing page should immediately show:
+
+    Model → Tool → Agent → Verifier
+           dynamic routing
+
+and:
+
+    Same model
+    Better execution
+    Lower cost
+
+with real benchmark evidence once available.
+
+---
+
+# 94. The star acquisition loop
+
+The most useful sequence is:
+
+    useful CLI
+        ↓
+    developer installs it
+        ↓
+    gets immediate result
+        ↓
+    benchmarks own workload
+        ↓
+    shares result
+        ↓
+    stars repository
+        ↓
+    opens issue
+        ↓
+    contributes plugin
+        ↓
+    publishes plugin
+        ↓
+    more users
+
+Your plugin ecosystem can become the growth engine.
+
+---
+
+# 95. The first "viral" feature
+
+Build:
+
+# `runtime compare`
+
+Example:
+
+    runtime compare task.json
+
+Output:
+
+    ┌────────────────────────────────────────┐
+    │ AGENT EXECUTION COMPARISON             │
+    ├────────────────────────────────────────┤
+    │ static harness     62%   $0.91   8m    │
+    │ adaptive runtime   64%   $0.42   5m    │
+    │ adaptive + RL      68%   $0.37   4m    │
+    └────────────────────────────────────────┘
+
+Those numbers are illustrative only; the product must populate them from real runs.
+
+Make the output shareable.
+
+Generate:
+
+    comparison.json
+    comparison.md
+    comparison.png
+
+Developers can attach that to issues/PRs and share it.
+
+---
+
+# 96. Plugin challenge
+
+Once the core works:
+
+> "Build a plugin for your favorite tool."
+
+Examples:
+
+    Jira
+    Notion
+    Slack
+    browser
+    database
+    Kubernetes
+    GitHub
+    Playwright
+
+Create:
+
+    plugin template
+
+One command:
+
+    runtime plugin create my-plugin
+
+This is how the ecosystem can grow organically.
+
+---
+
+# 97. Great GitHub repository hygiene
+
+From day one:
+
+    README
+    SECURITY.md
+    CONTRIBUTING.md
+    CODE_OF_CONDUCT.md
+    CHANGELOG.md
+    LICENSE
+    architecture docs
+    benchmark methodology
+    reproducibility instructions
+
+CI:
+
+    unit tests
+    integration tests
+    lint
+    type checking
+    Go tests
+    Python tests
+    plugin contract tests
+
+Release:
+
+    GitHub Releases
+    changelog
+    signed artifacts
+    container images
+
+---
+
+# 98. Documentation strategy
+
+Don't write a 100-page manual before users exist.
+
+Start with:
+
+    1. 60-second quickstart
+    2. concepts
+    3. build your first agent
+    4. build your first plugin
+    5. use an existing harness
+    6. enable adaptive routing
+    7. run benchmark
+    8. deploy
+
+Then advanced:
+
+    architecture
+    policy
+    RL
+    plugins
+    security
+    distributed deployment
+
+---
+
+# 99. GitHub repository homepage
+
+The first screen should look approximately like:
+
+    ADAPTIVE AGENT RUNTIME
+
+    Route computation, not just models.
+
+    Run any agent.
+    Use any model.
+    Use any tool.
+    Dynamically choose the cheapest
+    execution path that can finish the task.
+
+                 TASK
+                   ↓
+               DECIDE
+                   ↓
+         model / tool / agent
+                   ↓
+               OBSERVE
+                   ↓
+               DECIDE
+                   ↓
+                VERIFY
+
+    [Quickstart] [Benchmarks] [Plugins] [Docs]
+
+Then show real benchmark results once you have them.
+
+---
+
+# 100. Don't hide the competition
+
+Have a section:
+
+# "How is this different?"
+
+Explicitly compare:
+
+    LangGraph
+    OpenAI Agents SDK
+    Google ADK
+    OpenHands
+    HarnessX
+
+Say:
+
+    Frameworks:
+        define how agents execute.
+
+    Our runtime:
+        decides how execution should change
+        during the task.
+
+Do not make unsupported "better than X" claims.
+
+Show concrete capability differences.
+
+---
+
+# 101. The biggest product feature
+
+Eventually:
+
+# Agent Runtime Marketplace
+
+Developers publish:
+
+    agents
+    harnesses
+    decision models
+    policies
+    tools
+    verifiers
+    memories
+
+Each package declares:
+
+    capability
+    performance
+    price
+    security
+    dependencies
+    benchmark results
+
+Then the runtime can choose among them.
+
+This creates a platform rather than merely a library.
+
+---
+
+# 102. Long-term architecture
+
+The final ecosystem should look like:
+
+                         USER
+                          │
+                          ▼
+                ADAPTIVE RUNTIME
+                          │
+          ┌───────────────┼─────────────────┐
+          │               │                 │
+       MODELS           AGENTS            TOOLS
+          │               │                 │
+      local/cloud     OpenHands          MCP
+      vLLM             LangGraph          APIs
+      SGLang           ADK                Browser
+          │               │                 │
+          └───────────────┼─────────────────┘
+                          │
+                    VERIFIERS
+                          │
+                    EXPERIENCE
+                          │
+                     POLICY/RL
+                          │
+                   BENCHMARK LAB
+                          │
+                   PLUGIN ECOSYSTEM
+                          │
+                     CLOUD LAYER
+
+---
+
+# 103. Roadmap
+
+## Stage 1 — Runtime kernel
+
+Build:
+
+    Go execution engine
+    task/state/action abstractions
+    local worker system
+    SQLite state
+    CLI
+    one local model
+    three tools
+
+No RL.
+
+No marketplace.
+
+No dashboard.
+
+Goal:
+
+    reliable execution.
+
+---
+
+## Stage 2 — Decision layer
+
+Add:
+
+    DecisionModel interface
+    heuristic
+    Von
+    Kev
+    one direct-logit baseline
+
+Build:
+
+    decision benchmark
+    calibration
+
+Goal:
+
+    demonstrate cheap probabilistic routing.
+
+---
+
+## Stage 3 — Multi-action routing
+
+Add:
+
+    model
+    tool
+    agent
+    verifier
+    retry
+
+Goal:
+
+    runtime chooses the action, not only the model.
+
+---
+
+## Stage 4 — Agent adapters
+
+Add:
+
+    LangGraph
+    OpenHands
+    OpenAI Agents SDK
+    A2A
+
+Goal:
+
+    cross-harness execution.
+
+---
+
+## Stage 5 — Budget engine
+
+Add:
+
+    token budget
+    dollar budget
+    time budget
+    action budget
+
+Goal:
+
+    cost-aware execution.
+
+---
+
+## Stage 6 — Benchmark Lab
+
+Add:
+
+    SWE-bench
+    terminal tasks
+    GAIA-style tasks
+    web tasks
+    custom Adaptive Execution Benchmark
+
+Goal:
+
+    reproducible comparison.
+
+---
+
+## Stage 7 — RL
+
+Add:
+
+    trajectory store
+    LinUCB
+    contextual Thompson Sampling
+    offline replay
+
+Goal:
+
+    learned execution policy.
+
+---
+
+## Stage 8 — Adaptive graph
+
+Add:
+
+    graph rewriting
+    parallel execution
+    failure-directed escalation
+    verifier routing
+    harness switching
+
+Goal:
+
+    true adaptive execution.
+
+---
+
+## Stage 9 — Distributed runtime
+
+Add:
+
+    Go workers
+    gRPC
+    NATS/Redis
+    Postgres
+    object storage
+    OpenTelemetry
+
+Goal:
+
+    real distributed execution.
+
+---
+
+## Stage 10 — Kubernetes
+
+Add:
+
+    Helm
+    autoscaling
+    distributed worker fleet
+    sandbox execution
+
+Goal:
+
+    production deployment.
+
+---
+
+## Stage 11 — Dashboard
+
+Add:
+
+    trajectory visualization
+    policy viewer
+    benchmark viewer
+    plugin registry
+    cost analysis
+
+Goal:
+
+    developer experience.
+
+---
+
+## Stage 12 — Marketplace
+
+Add:
+
+    plugin registry
+    harness registry
+    policy registry
+    benchmark registry
+
+Goal:
+
+    ecosystem.
+
+---
+
+# 104. MVP definition
+
+Do NOT call the project MVP when it merely runs a model.
+
+MVP should mean:
+
+    task
+      ↓
+    state
+      ↓
+    decision model
+      ↓
+    choose between:
+        model
+        tool
+        agent
+      ↓
+    execute
+      ↓
+    observe
+      ↓
+    decide again
+      ↓
+    verify
+      ↓
+    result
+
+Plus:
+
+    local CLI
+    plugin system
+    trajectory logging
+    one benchmark
+    one dashboard page
+    deterministic budgets
+
+That is enough to prove the idea.
+
+---
+
+# 105. V1 definition
+
+V1 should add:
+
+    Von/Kev/Laya/NanoJev adapters
+    DIO-DM
+    LangGraph
+    OpenHands
+    MCP
+    A2A
+    budget engine
+    benchmark lab
+    replay
+    contextual bandit
+    Docker sandbox
+    OpenTelemetry
+    PostgreSQL
+    dashboard
+    Kubernetes
+
+---
+
+# 106. V2 research system
+
+V2:
+
+    harness switching
+    graph rewriting
+    counterfactual replay
+    adaptive verification
+    experience learning
+    meta-policy
+    online shadow learning
+    automated experiment generation
+    policy evolution
+    marketplace
+
+This is where the project becomes genuinely research-grade.
+
+---
+
+# 107. The thing I want you to avoid
+
+Don't make the repository 400,000 lines of code.
+
+A strong project is:
+
+    small core
+    strong interfaces
+    excellent benchmarks
+    excellent docs
+    useful CLI
+    real plugins
+    measured results
+
+The complexity should come from the **problem**, not from unnecessary framework code.
+
+---
+
+# 108. Final technical philosophy
+
+The runtime should always make this distinction:
+
+    MODEL
+        = generates / reasons
+
+    TOOL
+        = acts on environment
+
+    AGENT
+        = performs a specialized execution loop
+
+    HARNESS
+        = defines execution behavior
+
+    DECISION MODEL
+        = estimates which action is appropriate
+
+    POLICY
+        = decides what is allowed/optimal
+
+    SCHEDULER
+        = determines when and where to execute
+
+    VERIFIER
+        = determines whether the result is acceptable
+
+    RL
+        = learns how execution decisions should improve
+
+    RUNTIME
+        = coordinates all of the above
+
+That is the architecture.
+
+---
+
+# 109. The final one-line definition
+
+If someone asks:
+
+"What is this?"
+
+Answer:
+
+> **An adaptive runtime for AI agents that learns how to allocate models, tools, agents, verification, and computation across a task instead of forcing every task through the same execution path.**
+
+Not:
+
+    "AI agent framework."
+
+Not:
+
+    "LLM router."
+
+Not:
+
+    "multi-agent platform."
+
+Not:
+
+    "Jev alternative."
+
+It is:
+
+# **an intelligence execution scheduler.**
+
+---
+
+# 110. The final research/product loop
+
+Everything eventually reduces to:
+
+    ┌──────────────┐
+    │     TASK     │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │    STATE     │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │   DECISION   │
+    │ Jev-style /  │
+    │ learned      │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │    POLICY    │
+    │ cost/risk/   │
+    │ capability   │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │    ACTION    │
+    │ model/tool/  │
+    │ agent/etc.   │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │  OBSERVATION │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │   VERIFY     │
+    └──────┬───────┘
+           ↓
+    ┌──────────────┐
+    │    LEARN     │
+    └──────┬───────┘
+           │
+           └────────────→ next state
+
+This loop is the product, the systems architecture, and the research contribution.
