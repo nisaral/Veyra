@@ -79,6 +79,8 @@ class HarnessAdapter(ABC):
         try:
             if action.startswith("model_call"):
                 self.do_model_call(state, decision)
+            elif action == "compact_context":
+                self.do_compact(state)
             elif action.startswith("tool_call:"):
                 self.do_tool_call(state, action.split(":", 1)[1])
             elif action == "verify":
@@ -134,6 +136,32 @@ class HarnessAdapter(ABC):
 
     def do_tool_call(self, state: pb.CommonExecutionState, tool: str) -> None:
         self._execute_tool(state, tool, {})
+
+    def do_compact(self, state: pb.CommonExecutionState, keep_first: int = 1, keep_last: int = 4) -> None:
+        """OpenHands-style condenser: keep the first and last messages, summarize the middle.
+
+        This is deterministic. It does not call a model. The summary is a stand-in
+        for a condenser, and it is the action a later learned policy can choose
+        when the history is the expensive part of the step.
+        """
+        msgs = list(state.messages)
+        if len(msgs) <= keep_first + keep_last:
+            add_observation(state, "compact skipped; history is already short")
+            return
+        head = msgs[:keep_first]
+        tail = msgs[-keep_last:]
+        middle = msgs[keep_first:-keep_last]
+        lines = [f"[compacted {len(middle)} messages]"]
+        for msg in middle[:8]:
+            text = (msg.content or "").replace("\n", " ")
+            lines.append(f"{msg.role}: {text[:180]}")
+        del state.messages[:]
+        for msg in head:
+            state.messages.append(msg)
+        add_message(state, "user", "\n".join(lines))
+        for msg in tail:
+            state.messages.append(msg)
+        add_observation(state, f"compacted {len(middle)} messages; kept {keep_first}+{keep_last}")
 
     def do_retry(self, state: pb.CommonExecutionState) -> None:
         clear_failure(state)

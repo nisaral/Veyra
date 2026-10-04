@@ -6,6 +6,7 @@ from typing import Any
 
 from veyra.harness.base import HarnessAdapter
 from veyra.harness.langgraph_harness import ENGINE, LangGraphHarness, available as langgraph_available
+from veyra.harness.miniswe import MiniSweHarness, available as miniswe_available
 from veyra.harness.native import NativeHarness
 from veyra.harness.repair import RepairHarness
 from veyra.v1 import runtime_pb2 as pb
@@ -14,6 +15,7 @@ CLASSES: dict[str, type[HarnessAdapter]] = {
     NativeHarness.id: NativeHarness,
     RepairHarness.id: RepairHarness,
     LangGraphHarness.id: LangGraphHarness,
+    MiniSweHarness.id: MiniSweHarness,
 }
 
 
@@ -49,8 +51,10 @@ class HarnessRegistry:
 
     def triage(self) -> list[dict[str, Any]]:
         available, detail = langgraph_available()
+        mini_ok, mini_detail = miniswe_available()
         return [
             {"id": NativeHarness.id, "available": True, "detail": "built in"},
             {"id": RepairHarness.id, "available": True, "detail": "built in; diagnoses before the model call"},
             {"id": LangGraphHarness.id, "available": available, "detail": detail or "ok"},
+            {"id": MiniSweHarness.id, "available": mini_ok, "detail": mini_detail},
         ]

@@ -1,4 +1,4 @@
-"""Local trace viewer.
+﻿"""Local trace viewer.
 
 Reads run directories produced by the kernel (`events.jsonl`) and serves four
 screens: run list, timeline, decision debugger, and comparison table. No login
@@ -109,6 +109,25 @@ def comparison_text(root: Path) -> str:
     return ""
 
 
+def page_bytes() -> bytes:
+    return (Path(__file__).with_name("dashboard.html")).read_bytes()
+
+
+def overview(root: Path) -> dict[str, Any]:
+    from veyra import __version__
+    from veyra.bench.targets import TARGETS
+
+    return {
+        "version": __version__,
+        "runs": load_runs(root),
+        "comparison": comparison_text(root),
+        "targets": [
+            {"id": t.id, "role": t.role, "status": t.status, "upstream": t.upstream}
+            for t in TARGETS
+        ],
+    }
+
+
 class Viewer:
     def __init__(self, root: Path):
         self.root = root
@@ -120,8 +139,11 @@ class Viewer:
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
                 if parsed.path in {"/", "/index.html"}:
-                    body = _PAGE.encode("utf-8")
+                    body = page_bytes()
                     self._send(200, "text/html; charset=utf-8", body)
+                    return
+                if parsed.path == "/api/overview":
+                    self._json(overview(viewer.root))
                     return
                 if parsed.path == "/api/runs":
                     self._json({"runs": load_runs(viewer.root), "comparison": comparison_text(viewer.root)})
@@ -152,118 +174,5 @@ class Viewer:
                 return
 
         httpd = ThreadingHTTPServer((host, port), Handler)
-        print(f"veyra view  http://{host}:{port}   runs: {self.root}")
+        print(f"veyra dashboard  http://{host}:{port}   runs: {self.root}")
         httpd.serve_forever()
-
-
-_PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<title>Veyra runs</title>
-<style>
-  :root { color-scheme: light; --ink:#1c1915; --muted:#5c564c; --line:#e4dfd6; --bg:#f7f4ee; --card:#fff; --accent:#8a4b08; }
-  body { margin:0; font:15px/1.45 "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
-  header { padding:18px 24px; border-bottom:1px solid var(--line); background:var(--card); }
-  h1 { margin:0; font-size:20px; }
-  p.sub { margin:4px 0 0; color:var(--muted); }
-  nav button { margin-right:8px; margin-top:10px; }
-  main { padding:18px 24px 48px; display:grid; gap:16px; }
-  button, select { font:inherit; padding:6px 10px; border:1px solid var(--line); background:var(--card); border-radius:6px; cursor:pointer; }
-  button.on { border-color:var(--accent); color:var(--accent); }
-  table { width:100%; border-collapse:collapse; background:var(--card); }
-  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
-  pre { white-space:pre-wrap; font:13px/1.4 ui-monospace, monospace; }
-  .kind { font-weight:600; }
-  .drop { color:#8a2b12; }
-  .caveat { color:var(--muted); font-size:13px; }
-</style>
-</head>
-<body>
-<header>
-  <h1>Veyra</h1>
-  <p class="sub">Local trace viewer. Numbers on the comparison screen include the caveats stored with the run.</p>
-  <nav>
-    <button id="tab-runs" class="on">Runs</button>
-    <button id="tab-trace">Trace</button>
-    <button id="tab-decision">Decision</button>
-    <button id="tab-compare">Comparison</button>
-  </nav>
-</header>
-<main>
-  <section id="view-runs"></section>
-  <section id="view-trace" hidden></section>
-  <section id="view-decision" hidden></section>
-  <section id="view-compare" hidden></section>
-</main>
-<script>
-const state = { runs: [], comparison: "", current: null, detail: null };
-const tabs = ["runs","trace","decision","compare"];
-tabs.forEach(name => {
-  document.getElementById("tab-"+name).onclick = () => show(name);
-});
-function show(name) {
-  tabs.forEach(n => {
-    document.getElementById("view-"+n).hidden = n !== name;
-    document.getElementById("tab-"+n).classList.toggle("on", n === name);
-  });
-}
-function money(n) { return "$" + Number(n || 0).toFixed(4); }
-async function boot() {
-  const res = await fetch("/api/runs");
-  const data = await res.json();
-  state.runs = data.runs || [];
-  state.comparison = data.comparison || "";
-  renderRuns();
-  renderComparison();
-}
-function renderRuns() {
-  const rows = state.runs.map(r => `<tr data-id="${r.id}" style="cursor:pointer">
-    <td>${r.task}</td><td>${r.policy}</td><td>${r.harness}</td><td>${r.status}</td>
-    <td>${money(r.usd)}</td><td>${r.switches}</td><td>${(r.backends||[]).join(", ")}</td></tr>`).join("");
-  document.getElementById("view-runs").innerHTML = `<div class="card"><table>
-    <thead><tr><th>Task</th><th>Policy</th><th>Start</th><th>Status</th><th>Charged</th><th>Switches</th><th>Backend</th></tr></thead>
-    <tbody>${rows || "<tr><td colspan=7>No runs in this directory.</td></tr>"}</tbody></table></div>`;
-  document.querySelectorAll("#view-runs tr[data-id]").forEach(tr => {
-    tr.onclick = () => openRun(tr.dataset.id);
-  });
-}
-async function openRun(id) {
-  state.current = id;
-  const res = await fetch("/api/run?id=" + encodeURIComponent(id));
-  state.detail = await res.json();
-  renderTrace();
-  renderDecision();
-  show("trace");
-}
-function renderTrace() {
-  const steps = (state.detail && state.detail.steps) || [];
-  const body = steps.map(s => `<tr><td>${s.seq}</td><td class="kind">${s.kind}</td><td>${s.harness||""}</td><td>${s.chosen||""}</td><td>${s.backend||""}</td><td>${money(s.usd)}</td></tr>`).join("");
-  document.getElementById("view-trace").innerHTML = `<div class="card"><h2>${state.current}</h2><table>
-    <thead><tr><th>#</th><th>Event</th><th>Harness</th><th>Chosen</th><th>Backend</th><th>Ledger</th></tr></thead>
-    <tbody>${body}</tbody></table></div>`;
-}
-function renderDecision() {
-  const steps = ((state.detail && state.detail.steps) || []).filter(s => s.kind === "decision" || s.kind === "decision_rejected");
-  const blocks = steps.map(s => {
-    const cands = (s.candidates || []).map(c => `<li>${c.id} · success ${c.expected_success} · cost ${c.est_cost_usd} · risk ${c.risk}</li>`).join("");
-    const dropped = Object.entries(s.dropped || {}).map(([id, why]) => `<li class="drop">${id}: ${why}</li>`).join("");
-    return `<div class="card"><div class="kind">step ${s.seq} · ${s.chosen || s.kind} · ${s.backend}</div>
-      <p>${s.rationale || ""}</p>
-      <strong>Allowed</strong><ul>${cands || "<li>none recorded</li>"}</ul>
-      <strong>Dropped by policy</strong><ul>${dropped || "<li>none</li>"}</ul></div>`;
-  }).join("");
-  document.getElementById("view-decision").innerHTML = blocks || `<div class="card">Open a run from the list.</div>`;
-}
-function renderComparison() {
-  const text = state.comparison || "No comparison.md next to these runs.";
-  document.getElementById("view-compare").innerHTML = `<div class="card"><pre>${text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>
-    <p class="caveat">The comparison file is the source of the headline numbers. Read its caveats before quoting a cost cut.</p></div>`;
-}
-boot();
-</script>
-</body>
-</html>
-"""

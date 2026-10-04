@@ -5,4 +5,4 @@ that needs a Python ecosystem: harness adapters, decision backends, tools and
 the benchmark.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

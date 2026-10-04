@@ -6,11 +6,13 @@ make the *claim* easier to test or harder to fool.
 ## Development setup
 
 ```bash
-pip install -e "./python[dev,langgraph,plot]"
-make build          # dist/veyra
-make doctor
-make test
+pip install -e "./python[dev,plot]"
+cd go && go build -o ../dist/veyra.exe ./cmd/veyra   # or: make build
+veyra doctor
+veyra compare --spawn --split dev --out out/dev
 ```
+
+Optional: `pip install 'veyra[langgraph]'` and `pip install 'veyra[miniswe]'`.
 
 ## Before opening a PR
 
@@ -51,6 +53,12 @@ deterministic and self-contained.
 Implement `HarnessAdapter` in `python/src/veyra/harness/`, register it in `registry.py`, and make
 `start()` able to adopt an existing `CommonExecutionState` (that is what makes it switchable).
 Add a test that a step mutates the portable state and a test that resuming from a checkpoint works.
+If the harness wraps an optional package, follow `miniswe.py`: report unavailable from
+`doctor`, and fail the run with `harness_error` rather than substituting another loop.
+
+The seam that matters for a new scaffold is `start` / `step` / `do_compact`. `compact_context`
+is already a kernel candidate once the history is long. A harness that overrides `step`
+must handle that id, as the LangGraph adapter does.
 
 ## Code style
 

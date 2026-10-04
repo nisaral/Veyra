@@ -55,6 +55,26 @@ class LLMClient(Protocol):
     def complete(self, messages: list[dict[str, str]], tier: str, tools: list[str]) -> LLMReply: ...
 
 
+def chat_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Merge adjacent turns that share a role.
+
+    Gemma-style chat templates reject ``user`` followed by ``user``. The
+    harness records the task and the state summary as two user messages, so
+    the live client folds them into one turn before the request.
+    """
+    merged: list[dict[str, str]] = []
+    for message in messages:
+        role = message.get("role") or "user"
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = message.get("content") or ""
+        if merged and merged[-1]["role"] == role:
+            merged[-1]["content"] = (merged[-1]["content"] + "\n\n" + content).strip()
+            continue
+        merged.append({"role": role, "content": content})
+    return merged
+
+
 def parse_reply(text: str, model: str, usd: float, tokens: int, latency_ms: int) -> LLMReply:
     """Parse the tool protocol JSON, tolerating surrounding prose/fences."""
     payload: dict[str, Any] = {}
@@ -141,7 +161,7 @@ class OllamaLLM:
         system = TOOL_PROTOCOL + "\nAvailable tools: " + ", ".join(sorted(tools)) + "\n"
         body = {
             "model": model,
-            "messages": [{"role": "system", "content": system}] + messages,
+            "messages": chat_messages([{"role": "system", "content": system}] + messages),
             "stream": False,
             "options": {"temperature": 0.0},
         }
@@ -182,7 +202,7 @@ class OpenAICompatibleLLM:
         system = TOOL_PROTOCOL + "\nAvailable tools: " + ", ".join(sorted(tools)) + "\n"
         body = {
             "model": model,
-            "messages": [{"role": "system", "content": system}] + messages,
+            "messages": chat_messages([{"role": "system", "content": system}] + messages),
             "temperature": 0.0,
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}

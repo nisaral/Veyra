@@ -65,6 +65,20 @@ func Candidates(in Input) []*veyrav1.ActionCandidate {
 	if !state.GetDone() && !state.GetFailed() {
 		out = append(out, modelCandidate(CheapTier, in.CurrentHarness))
 		out = append(out, modelCandidate(StrongTier, in.CurrentHarness))
+		if chars := contextChars(state); chars >= compactMinChars {
+			out = append(out, &veyrav1.ActionCandidate{
+				Id:              "compact_context",
+				Type:            veyrav1.ActionType_TOOL_CALL,
+				Provider:        in.CurrentHarness,
+				Capabilities:    []string{"compact"},
+				EstCostUsd:      0.0002,
+				EstLatencyMs:    200,
+				ExpectedSuccess: 0.70,
+				Risk:            0.05,
+				PayloadJson:     fmt.Sprintf(`{"chars":%d,"keep_first":1,"keep_last":4}`, chars),
+				Rationale:       "drop the middle of the message history and keep a short summary",
+			})
+		}
 	}
 
 	if state.GetFailed() || in.RetriesInARow > 0 {
@@ -117,6 +131,18 @@ func Candidates(in Input) []*veyrav1.ActionCandidate {
 		})
 	}
 	return out
+}
+
+// compactMinChars is the point at which a context condenser is worth a step.
+// Below this, proposing compaction would steal the turn from a model call.
+const compactMinChars = 6000
+
+func contextChars(state *veyrav1.CommonExecutionState) int {
+	n := 0
+	for _, m := range state.GetMessages() {
+		n += len(m.GetContent())
+	}
+	return n
 }
 
 func modelCandidate(t ModelTier, provider string) *veyrav1.ActionCandidate {

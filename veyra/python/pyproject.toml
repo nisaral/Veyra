@@ -4,9 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "veyra"
-version = "0.1.0"
-description = "Adaptive execution runtime: route models, tools and harnesses at runtime under a budget"
-readme = "README.md"
+version = "0.2.0"
+description = "Adaptive agent harness: choose the next tool, model, verification, retry, or abstention under a budget"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dependencies = [
@@ -18,10 +17,12 @@ dependencies = [
 
 [project.optional-dependencies]
 langgraph = ["langgraph>=0.2"]
+miniswe = ["mini-swe-agent>=2"]
 plot = ["matplotlib>=3.8"]
 dev = ["pytest>=8.0", "grpcio-tools>=1.60"]
 
 [project.scripts]
+veyra = "veyra.cli:main"
 veyra-py = "veyra.cli:main"
 
 [tool.pytest.ini_options]
@@ -34,4 +35,5 @@ asyncio_default_fixture_loop_scope = "function"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"veyra" = ["dashboard.html"]
 "veyra.v1" = ["*.pyi"]

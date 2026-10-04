@@ -1,16 +1,27 @@
 # Veyra
 
-Adaptive agent runtime in [`veyra/`](veyra/). It keeps a portable execution state, a budget ledger, and a policy that can switch harness at a checkpoint. The decision model scores candidates. It does not act.
+Open-source adaptive agent harness. It chooses the next action — tool, model, verification, retry, or abstention — under cost, latency, permission, and reliability constraints. The decision model returns probabilities. The policy is what acts.
 
-The harness that wins the bundled offline suite is **repair**: it loads the failing file before the model call and edits before it executes. On the held-out split it reaches 100% success at $0.0096 per task. The plain loop is 80% at $0.0078. The graph harness is 100% at $0.0190. Switching into repair ties repair's cost. It does not beat starting there. These numbers use the scripted model. A live model run is still required before treating them as agent quality.
+The problem it is for: agents waste calls, retry a bad tool, and act when they should abstain. The number we will publish, once measured, is task success per dollar and wasted calls against a fixed ReAct baseline on MCPAgentBench. That number does not exist yet.
+
+The full objective, the arm list, and the benchmark order are in [`veyra/docs/OBJECTIVE.md`](veyra/docs/OBJECTIVE.md). The status of each public benchmark is in [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md). `veyra targets` prints the same checklist.
+
+The bundled offline suite is a plumbing check, not this claim. On that scripted suite the repair harness reaches 100% at $0.0096 per task, the plain loop 80% at $0.0078, and the graph harness 100% at $0.0190. Do not quote those as the MCPAgentBench result.
 
 ```bash
 cd veyra
-pip install -e ./python
-# build dist/veyra with Go, then:
-python -m veyra.cli compare --spawn --split dev --out out/dev
-python -m veyra.cli view --runs out/dev
+pip install -e "./python[dev]"
+# Go toolchain once: builds dist/veyra
+cd go && go build -o ../dist/veyra.exe ./cmd/veyra && cd ..
+veyra compare --spawn --split dev --out out/dev
+veyra view --runs out/dev
 ```
+
+The first command is the offline suite. It does not call a model. The trace
+viewer then opens the decision log: candidates, policy drops, and the harness
+switch. Optional scaffolds: `pip install 'veyra[miniswe]'` for the mini-swe-agent
+adapter and `pip install 'veyra[langgraph]'` for the real LangGraph package.
+Neither is required for the offline suite. See [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md).
 
 `plan.txt` is a rejected superset of this runtime. Do not build the control plane, marketplace, or database stack from it.
 

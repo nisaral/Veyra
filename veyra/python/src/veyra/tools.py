@@ -40,6 +40,11 @@ class ToolContext:
     max_output: int = 4000
 
 
+def _arg_path(args: dict) -> str:
+    """Accept the documented `path` key and the `filename` alias models often emit."""
+    return str(args.get("path") or args.get("filename") or args.get("file") or "")
+
+
 def _safe_path(ctx: ToolContext, raw: str) -> Path:
     """Resolve a path and refuse to escape the task workspace."""
     candidate = (ctx.workspace / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
@@ -50,7 +55,7 @@ def _safe_path(ctx: ToolContext, raw: str) -> Path:
 
 
 def _read_file(args: dict[str, Any], ctx: ToolContext) -> tuple[bool, str]:
-    path = _safe_path(ctx, str(args.get("path", "")))
+    path = _safe_path(ctx, _arg_path(args))
     if not path.exists():
         return False, f"file not found: {path.name}"
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -58,7 +63,7 @@ def _read_file(args: dict[str, Any], ctx: ToolContext) -> tuple[bool, str]:
 
 
 def _write_file(args: dict[str, Any], ctx: ToolContext) -> tuple[bool, str]:
-    path = _safe_path(ctx, str(args.get("path", "")))
+    path = _safe_path(ctx, _arg_path(args))
     path.parent.mkdir(parents=True, exist_ok=True)
     content = str(args.get("content", ""))
     if args.get("append"):
@@ -127,7 +132,7 @@ def _run_command(args: dict[str, Any], ctx: ToolContext) -> tuple[bool, str]:
 
 
 def _run_python_file(args: dict[str, Any], ctx: ToolContext) -> tuple[bool, str]:
-    rel = str(args.get("path", ""))
+    rel = _arg_path(args)
     path = _safe_path(ctx, rel)
     if not path.exists():
         return False, f"file not found: {rel}"

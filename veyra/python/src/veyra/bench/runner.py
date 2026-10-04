@@ -29,8 +29,8 @@ class Arm:
     kind: str  # fixed | adaptive | oracle
 
 
-def default_arms() -> list[Arm]:
-    return [
+def default_arms(include_kev: bool = False) -> list[Arm]:
+    arms = [
         Arm("fixed:native", "fixed", "native", "fixed"),
         Arm("fixed:repair", "fixed", "repair", "fixed"),
         Arm("fixed:langgraph", "fixed", "langgraph", "fixed"),
@@ -39,9 +39,12 @@ def default_arms() -> list[Arm]:
         Arm("veyra:bandit", "bandit", "native", "adaptive"),
         Arm("oracle", "oracle", "native", "oracle"),
     ]
+    if include_kev:
+        arms.insert(4, Arm("veyra:kev", "kev", "native", "adaptive"))
+    return arms
 
 
-def test_arms(best_fixed: str) -> list[Arm]:
+def test_arms(best_fixed: str, include_kev: bool = False) -> list[Arm]:
     """The held-out protocol: only the dev-selected baseline plus adaptives.
 
     Running every fixed arm on test as well would invite post-hoc selection of a
@@ -50,6 +53,7 @@ def test_arms(best_fixed: str) -> list[Arm]:
     return [
         Arm(f"fixed:{best_fixed}", "fixed", best_fixed, "fixed"),
         Arm("veyra:heuristic", "heuristic", "native", "adaptive"),
+        *( [Arm("veyra:kev", "kev", "native", "adaptive")] if include_kev else [] ),
         Arm("veyra:von", "von", "native", "adaptive"),
         Arm("veyra:bandit", "bandit", "native", "adaptive"),
         Arm("oracle", "oracle", "native", "oracle"),

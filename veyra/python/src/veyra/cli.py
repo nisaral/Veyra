@@ -52,7 +52,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     serve(args.addr, harness_opts={"workspace": args.workspace} if args.workspace else {},
           default_backend=args.decision,
-          decision_opts={"endpoint": args.von_endpoint or None, "state_path": args.bandit_state or None})
+          decision_opts={"endpoint": args.von_endpoint or None, "kev_endpoint": args.kev_endpoint or None,
+                         "state_path": args.bandit_state or None})
+    return 0
+
+
+def cmd_targets(_args: argparse.Namespace) -> int:
+    from veyra.bench.targets import checklist
+
+    print(checklist())
     return 0
 
 
@@ -93,6 +101,8 @@ def _caveats(results: list[dict[str, Any]], args: argparse.Namespace | None = No
     if "von-surrogate" in backends:
         out.append("veyra:von ran as `von-surrogate` (no --von-endpoint): it is NOT a real Jev-style model "
                    "and must not be reported as one.")
+    if "kev-unconfigured" in backends:
+        out.append("veyra:kev had no --kev-endpoint: the kernel fell back and this arm is not a Kev result.")
     if "bandit-untrained" in backends:
         out.append("veyra:bandit ran untrained (no --bandit-state): it defers to the heuristic baseline "
                    "and is labelled `bandit-untrained` in the event log.")
@@ -106,19 +116,20 @@ def cmd_compare(args: argparse.Namespace) -> int:
     tasks = all_tasks() if args.split == "all" else by_split(args.split)
     out = Path(args.out)
     dev_results: list[dict[str, Any]] = []
+    include_kev = bool(args.kev_endpoint) or (bool(args.arms) and "veyra:kev" in args.arms)
     if args.arms:
         wanted = {a.strip() for a in args.arms.split(",")}
-        arms = [a for a in runner.default_arms() if a.name in wanted]
+        arms = [a for a in runner.default_arms(include_kev=True) if a.name in wanted]
     elif args.select_from:
         dev_results = _load_results(args.select_from)
         best, _ = report.pick_best_fixed(dev_results)
         if not best:
             print(f"compare: no fixed:* arms found in {args.select_from}", file=sys.stderr)
             return 2
-        arms = runner.test_arms(best)
+        arms = runner.test_arms(best, include_kev=include_kev)
         print(f"compare: dev selected fixed:{best}; held-out arms = {[a.name for a in arms]}")
     else:
-        arms = runner.default_arms()
+        arms = runner.default_arms(include_kev=include_kev)
 
     sidecar = None
     kernel = None
@@ -136,6 +147,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
                       "second sidecar", file=sys.stderr)
                 return 2
             decision_opts = {"endpoint": args.von_endpoint or None,
+                             "kev_endpoint": args.kev_endpoint or None,
                              "state_path": args.bandit_state or None}
             server, _ = build_server(args.sidecar, {}, "heuristic", decision_opts)
             server.start()
@@ -229,10 +241,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     for row in registry.triage():
         mark = "OK " if row["available"] else "NO "
         print(f"{mark}{row['id']:10s} {row['detail']}")
-    from veyra.decision import von
+    from veyra.decision import kev, von
 
     ok, detail = von.available(args.von_endpoint or None)
     print(f"{'OK ' if ok else 'NO '}von        {detail}")
+    ok, detail = kev.available(args.kev_endpoint or None)
+    print(f"{'OK ' if ok else 'NO '}kev        {detail}")
     ready = _wait_port(args.addr, timeout=1.5)
     print(f"{'OK ' if ready else 'NO '}kernel     {args.addr} {'reachable' if ready else 'not running'}")
     return 0
@@ -247,8 +261,12 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--decision", default="heuristic")
     p_serve.add_argument("--workspace", default="")
     p_serve.add_argument("--von-endpoint", default="")
+    p_serve.add_argument("--kev-endpoint", default="")
     p_serve.add_argument("--bandit-state", default="")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_targets = sub.add_parser("targets", help="list the public benchmarks this project is aiming at")
+    p_targets.set_defaults(func=cmd_targets)
 
     p_tasks = sub.add_parser("tasks", help="list the bundled benchmark tasks")
     p_tasks.add_argument("--split", default="all", choices=["dev", "test", "all"])
@@ -268,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="dev results dir/file; restricts test arms to the dev-selected baseline")
     p_cmp.add_argument("--bandit-state", default="", help="trained LinUCB policy json")
     p_cmp.add_argument("--von-endpoint", default="", help="Jev-style typed decision model HTTP endpoint")
+    p_cmp.add_argument("--kev-endpoint", default="",
+                       help="local Kev server, e.g. http://127.0.0.1:8009; adds the veyra:kev arm")
     p_cmp.add_argument("--model-mode", default="offline", choices=["offline", "ollama", "openai"],
                        help="offline = scripted, deterministic; ollama/openai = live model")
     p_cmp.add_argument("--model-cheap", default="", help="cheap tier model name for live modes")
@@ -281,15 +301,22 @@ def main(argv: list[str] | None = None) -> int:
     p_train.add_argument("--alpha", type=float, default=0.6)
     p_train.set_defaults(func=cmd_train)
 
-    p_view = sub.add_parser("view", help="local trace viewer for a runs directory")
+    p_view = sub.add_parser("dashboard", help="product dashboard for a runs directory")
     p_view.add_argument("--runs", default="out/dev")
     p_view.add_argument("--host", default="127.0.0.1")
     p_view.add_argument("--port", type=int, default=7860)
     p_view.set_defaults(func=cmd_view)
 
+    p_view_alias = sub.add_parser("view", help="alias for dashboard")
+    p_view_alias.add_argument("--runs", default="out/dev")
+    p_view_alias.add_argument("--host", default="127.0.0.1")
+    p_view_alias.add_argument("--port", type=int, default=7860)
+    p_view_alias.set_defaults(func=cmd_view)
+
     p_doc = sub.add_parser("doctor", help="environment check")
     p_doc.add_argument("--addr", default=DEFAULT_KERNEL)
     p_doc.add_argument("--von-endpoint", default="")
+    p_doc.add_argument("--kev-endpoint", default="")
     p_doc.set_defaults(func=cmd_doctor)
 
     args = parser.parse_args(argv)

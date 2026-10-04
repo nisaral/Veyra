@@ -11,10 +11,12 @@ from veyra.decision.base import DecisionModel, decide, probabilities
 from veyra.decision.bandit import LinUCBBandit
 from veyra.decision.heuristic import HeuristicDecision
 from veyra.decision.oracle import OracleDecision
+from veyra.decision.kev import KevDecision
 from veyra.decision.von import VonDecision
 
 BACKENDS: dict[str, type[DecisionModel]] = {
     "heuristic": HeuristicDecision,
+    "kev": KevDecision,
     "von": VonDecision,
     "bandit": LinUCBBandit,
     "oracle": OracleDecision,
@@ -33,6 +35,7 @@ __all__ = [
     "DecisionModel",
     "HeuristicDecision",
     "VonDecision",
+    "KevDecision",
     "LinUCBBandit",
     "OracleDecision",
     "BACKENDS",

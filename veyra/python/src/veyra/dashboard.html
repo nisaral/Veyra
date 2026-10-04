@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Veyra</title>
+<style>
+  :root {
+    --bg: #f5f4f0;
+    --panel: #fcfcfb;
+    --ink: #1c1b19;
+    --muted: #6b6862;
+    --line: #e6e3dc;
+    --accent: #1c1b19;
+    --accent-ink: #f7f6f3;
+    --bad: #8f3d32;
+    --ok: #2c6b45;
+    --sidebar: 220px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 15px/1.5 "Segoe UI", "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  a { color: var(--accent); }
+  button, select { font: inherit; color: inherit; }
+  .app { display: grid; grid-template-columns: var(--sidebar) 1fr; min-height: 100%; }
+  aside {
+    background: #f0eee9;
+    border-right: 1px solid var(--line);
+    padding: 22px 14px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .mark { font-weight: 650; letter-spacing: -0.02em; font-size: 18px; }
+  .mark span { color: var(--muted); font-weight: 450; font-size: 12px; display: block; margin-top: 2px; }
+  nav { margin-top: 28px; display: flex; flex-direction: column; gap: 2px; }
+  nav button {
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  nav button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(28,27,25,.06); }
+  main { padding: 28px 32px 64px; max-width: 1080px; }
+  h1 { font-size: 28px; font-weight: 560; letter-spacing: -0.03em; margin: 0 0 8px; }
+  .lede { color: var(--muted); margin: 0 0 20px; max-width: 62ch; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .v { font-size: 20px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: #fafbfc; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: #f7f8f9; }
+  .status-ok { color: var(--ok); }
+  .status-bad { color: var(--bad); }
+  pre {
+    white-space: pre-wrap;
+    font: 12.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0;
+  }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  code { font: 12.5px/1.4 ui-monospace, Consolas, monospace; background: #eef0f3; padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav { flex-direction: row; flex-wrap: wrap; margin-top: 12px; }
+    .grid { grid-template-columns: 1fr; }
+    main { padding: 20px 16px 48px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="mark">Veyra<span id="version">harness</span></div>
+    <nav>
+      <button id="tab-overview" class="on">Overview</button>
+      <button id="tab-runs">Runs</button>
+      <button id="tab-decision">Decision</button>
+      <button id="tab-benchmarks">Benchmarks</button>
+      <button id="tab-install">Install</button>
+    </nav>
+  </aside>
+  <main>
+    <section id="view-overview"></section>
+    <section id="view-runs" hidden></section>
+    <section id="view-decision" hidden></section>
+    <section id="view-benchmarks" hidden></section>
+    <section id="view-install" hidden></section>
+  </main>
+</div>
+<script>
+const tabs = ["overview","runs","decision","benchmarks","install"];
+const state = { runs: [], comparison: "", targets: [], version: "", current: null, detail: null };
+tabs.forEach(name => {
+  document.getElementById("tab-"+name).onclick = () => show(name);
+});
+function show(name) {
+  tabs.forEach(n => {
+    document.getElementById("view-"+n).hidden = n !== name;
+    document.getElementById("tab-"+n).classList.toggle("on", n === name);
+  });
+}
+function money(n) { return "$" + Number(n || 0).toFixed(4); }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+}
+async function boot() {
+  const res = await fetch("/api/overview");
+  const data = await res.json();
+  state.runs = data.runs || [];
+  state.comparison = data.comparison || "";
+  state.targets = data.targets || [];
+  state.version = data.version || "";
+  document.getElementById("version").textContent = state.version ? "v" + state.version : "harness";
+  renderOverview();
+  renderRuns();
+  renderBenchmarks();
+  renderInstall();
+  renderDecision();
+}
+function renderOverview() {
+  const measured = state.targets.filter(t => t.status === "measured").length;
+  const succeeded = state.runs.filter(r => String(r.status).includes("SUCCEED")).length;
+  document.getElementById("view-overview").innerHTML = `
+    <h1>Execution harness</h1>
+    <p class="lede">Veyra chooses the next tool, model, verification, retry, or abstention under a budget. The decision model returns probabilities. The policy is what acts. Figures on this page come from the run directory you opened.</p>
+    <div class="grid">
+      <div class="card"><div class="k">Runs in this directory</div><div class="v">${state.runs.length}</div></div>
+      <div class="card"><div class="k">Succeeded</div><div class="v">${succeeded}</div></div>
+      <div class="card"><div class="k">Public benchmarks measured</div><div class="v">${measured} / ${state.targets.length}</div></div>
+    </div>
+    <div class="card"><div class="k">Open a trace</div><p>Select a run from Runs. The Decision screen lists the candidates the policy allowed and the ones it dropped.</p></div>`;
+}
+function renderRuns() {
+  const rows = state.runs.map(r => {
+    const ok = String(r.status).includes("SUCCEED");
+    return `<tr class="click" data-id="${esc(r.id)}">
+      <td>${esc(r.task)}</td><td>${esc(r.policy)}</td><td>${esc(r.harness)}</td>
+      <td class="${ok ? "status-ok" : "status-bad"}">${esc(r.status)}</td>
+      <td>${money(r.usd)}</td><td>${r.actions}</td><td>${r.switches}</td>
+      <td>${esc((r.backends||[]).join(", "))}</td></tr>`;
+  }).join("");
+  document.getElementById("view-runs").innerHTML = `
+    <h1>Runs</h1>
+    <p class="lede">One row per kernel run. Charged dollars come from the ledger, not from a model's own estimate.</p>
+    <table><thead><tr><th>Task</th><th>Policy</th><th>Harness</th><th>Status</th><th>Charged</th><th>Actions</th><th>Switches</th><th>Backend</th></tr></thead>
+    <tbody>${rows || "<tr><td colspan='8'>No runs. Start with <code>veyra compare --spawn --split dev --out out/dev</code> and reopen this directory.</td></tr>"}</tbody></table>`;
+  document.querySelectorAll("#view-runs tr.click").forEach(tr => {
+    tr.onclick = () => openRun(tr.dataset.id);
+  });
+}
+async function openRun(id) {
+  state.current = id;
+  const res = await fetch("/api/run?id=" + encodeURIComponent(id));
+  state.detail = await res.json();
+  renderDecision();
+  show("decision");
+}
+function renderDecision() {
+  const steps = ((state.detail && state.detail.steps) || []).filter(s => s.kind === "decision" || s.kind === "decision_rejected" || s.kind === "decision_fallback");
+  const blocks = steps.map(s => {
+    const cands = (s.candidates || []).map(c => `<li><code>${esc(c.id)}</code> · success ${esc(c.expected_success)} · cost ${esc(c.est_cost_usd)} · risk ${esc(c.risk)}</li>`).join("");
+    const dropped = Object.entries(s.dropped || {}).map(([id, why]) => `<li class="status-bad"><code>${esc(id)}</code> · ${esc(why)}</li>`).join("");
+    return `<div class="card"><strong>${esc(s.kind)} ${esc(s.seq)}</strong> · ${esc(s.chosen || "")} · ${esc(s.backend)}
+      <p>${esc(s.rationale || "")}</p>
+      <div class="k">Allowed</div><ul>${cands || "<li>none recorded</li>"}</ul>
+      <div class="k">Dropped by policy</div><ul>${dropped || "<li>none</li>"}</ul></div>`;
+  }).join("");
+  document.getElementById("view-decision").innerHTML = `
+    <h1>Decision</h1>
+    <p class="lede">${state.current ? esc(state.current) : "Open a run from the list. This screen is empty until then."}</p>
+    <div class="stack">${blocks || "<div class='card'>No decision events loaded.</div>"}</div>`;
+}
+function renderBenchmarks() {
+  const rows = state.targets.map(t => `<tr><td><code>${esc(t.id)}</code></td><td>${esc(t.role)}</td><td>${esc(t.status)}</td><td>${esc(t.upstream)}</td></tr>`).join("");
+  document.getElementById("view-benchmarks").innerHTML = `
+    <h1>Benchmarks</h1>
+    <p class="lede">A status of not_run means Veyra has no recorded score. The comparison below is only the file sitting next to these runs.</p>
+    <table><thead><tr><th>Benchmark</th><th>Role</th><th>Status</th><th>What it is</th></tr></thead><tbody>${rows}</tbody></table>
+    <h2 style="font-size:16px;margin:22px 0 8px">Comparison file</h2>
+    <pre>${esc(state.comparison || "No comparison.md in this directory.")}</pre>`;
+}
+function renderInstall() {
+  document.getElementById("view-install").innerHTML = `
+    <h1>Install</h1>
+    <p class="lede">The harness is the <code>veyra</code> command. Kev is the local decision model. Install it from github.com/jaredpalmer/kev and serve Kev-0.8B. The package named kev on PyPI is a different project.</p>
+    <pre>pip install -e "./python[dev]"
+cd go && go build -o ../dist/veyra.exe ./cmd/veyra && cd ..
+veyra doctor
+veyra compare --spawn --split dev --out out/dev
+veyra dashboard --runs out/dev
+
+# decision-model arm, after a real Kev server is listening
+veyra compare --spawn --split dev --out out/kev \\
+  --arms fixed:native,veyra:heuristic,veyra:kev \\
+  --kev-endpoint http://127.0.0.1:8009</pre>`;
+}
+boot();
+</script>
+</body>
+</html>

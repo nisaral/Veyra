@@ -29,6 +29,11 @@ out/test/**
 !out/test/comparison.png
 !out/test/results.json
 !out/test/verdict.json
+!out/kev/
+out/kev/**
+!out/kev/comparison.md
+!out/kev/comparison.png
+!out/kev/results.json
 *.db
 *.sqlite
 

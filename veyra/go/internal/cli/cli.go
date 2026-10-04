@@ -175,7 +175,7 @@ func cmdRun(args []string) error {
 
 func isRemotePolicy(p string) bool {
 	switch p {
-	case "von", "bandit", "oracle":
+	case "von", "kev", "bandit", "oracle":
 		return true
 	}
 	return false

@@ -220,6 +220,10 @@ class LangGraphHarness(HarnessAdapter):
         self._pb = state
 
     def step(self, state: pb.CommonExecutionState, decision: pb.Decision) -> pb.CommonExecutionState:
+        if decision.chosen_id == "compact_context":
+            state.step += 1
+            self.do_compact(state)
+            return state
         self._pb = state
         state.step += 1
         inner: GraphState = {

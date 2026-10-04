@@ -1,12 +1,10 @@
 # Veyra
 
-**An adaptive agent runtime that switches execution harness mid-task, under a budget, using a portable state contract.**
+**An adaptive agent harness that chooses the next tool, model, verification, retry, or abstention under a budget and a permission check.**
 
-Veyra runs a task in one harness (a plain ReAct loop or a graph runtime). While it runs, a
-decision model watches the portable execution state and can move the run to a *different* harness
-at a checkpoint — before spending the rest of the budget in a strategy that is not working.
+The product objective is in [`docs/OBJECTIVE.md`](docs/OBJECTIVE.md). The public benchmarks and their status are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). `veyra targets` prints the checklist. No public-benchmark number has been measured yet.
 
-This repository is the v0.1 research prototype behind one pre-registered question:
+The v0.1 prototype below answers a narrower pre-registered question about switching coding harnesses:
 
 > **Can a lightweight, state-dependent controller improve the cost of long-horizon agent
 > execution by switching between execution harnesses without materially reducing task success?**
@@ -134,17 +132,16 @@ per-step harness overhead**. Harness choice is therefore an economic decision, a
 Prerequisites: Go 1.24+, Python 3.10+, `protoc` (only to regenerate the wire format).
 
 ```bash
-pip install -e ./python            # installs veyra-py + grpcio/protobuf/httpx
-make build                         # builds dist/veyra
-make doctor                        # python, harnesses, decision backends, kernel
-
-make bench-dev                     # 15 dev tasks x 6 arms -> out/dev
-make train                         # fit the bandit on dev traces only
-make bench-test                    # 15 held-out tasks x 5 arms -> out/test + verdict
-
-python -m veyra.cli tasks          # list the bundled suite
-python -m veyra.cli view --runs out/dev
+pip install -e "./python[dev]"
+cd go && go build -o ../dist/veyra.exe ./cmd/veyra && cd ..
+veyra doctor
+veyra compare --spawn --split dev --out out/dev
+veyra view --runs out/dev
+veyra train --runs-dir out/dev/runs --out policies/bandit.json
+veyra compare --spawn --split test --out out/test --select-from out/dev --bandit-state policies/bandit.json
 ```
+
+`make bench-dev`, `make train`, and `make bench-test` are the same three steps when `make` exists.
 
 One-off, no Makefile:
 
