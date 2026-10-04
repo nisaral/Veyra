@@ -1,7 +1,12 @@
-# Veyra comparison
+# Veyra comparison — SYNTHETIC / SCRIPTED
+
+This table is an internal smoke test. The harness model is the scripted offline
+model. Kev only scored the next-action choice. Do not quote it as MCPAgentBench,
+as a live-model result, or as evidence that Veyra improves real tool use.
 
 - model: `offline` (scripted model)
 - split: `dev`  tasks: 15
+- label: `synthetic/scripted`
 - generated: 2026-10-04 07:33:34 UTC
 
 | arm | success | mean $ | mean wall ms | mean actions | switches/run |

@@ -19,7 +19,7 @@ class Target:
 
 TARGETS: tuple[Target, ...] = (
     Target("mcpagentbench", "main external benchmark", "not_run",
-           "MCP tasks with distractor tools and execution-efficiency metrics"),
+           "official Brunestuder/MCPAgentBench; veyra mcpagentbench --agent react"),
     Target("bfcl-v4", "tool-selection baseline", "not_run",
            "Berkeley function-calling leaderboard, multi-turn and agentic splits"),
     Target("tau-bench", "stateful tool-agent-user", "not_run",

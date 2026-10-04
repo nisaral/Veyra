@@ -8,7 +8,7 @@ The objective and the order of proof are in `OBJECTIVE.md`. Nothing in this file
 |---|---|---|
 | Bundled dev split with Kev-0.8B (`out/kev`) | Scripted tasks, live Kev decisions. | Measured. Heuristic 100% at $0.0096. Kev-0.8B 80% at $0.0386. Kev did not switch on recovery. Not MCPAgentBench. |
 | Gemma 3 4B probe (`out/live-wide`) | Live model, laptop, dev tasks only. | Partial. The API dropped mid-run. |
-| MCPAgentBench | Main external benchmark. | Not run. |
+| MCPAgentBench | Main external benchmark. Official checkout in `third_party/MCPAgentBench`. | Not run. Needs `ROUTER_API_KEY` and `veyra mcpagentbench --agent react --model …`. |
 | BFCL v4 | Tool-selection baseline. | Not run. |
 | τ-bench / τ³-bench | Stateful tool-agent-user. | Not run. |
 | ToolSandbox | Adaptation and recovery. | Not run. |

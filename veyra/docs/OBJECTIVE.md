@@ -6,6 +6,8 @@ The applied problem: agent workflows waste calls, pick a bad tool, retry it, and
 
 This is an applied systems project. The paper-shaped tracks in the rest of this repository are not the product.
 
+The commit tagged `v0.2.0-pre-mcpagentbench` is the freeze before MCPAgentBench. The table in `out/kev/` is labelled `synthetic/scripted`. Do not quote it as the public result. The next measured number is TFS/TEFS from the official MCPAgentBench evaluator, with a real LLM, ReAct first.
+
 ## What a result has to show
 
 On a fixed model and a fixed tool catalog, compare:

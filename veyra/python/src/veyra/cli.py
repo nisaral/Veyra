@@ -57,6 +57,29 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mcpagentbench(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from veyra.bench import mcpagent
+
+    mcpagent.require_api_key()
+    name = args.output_name or f"{args.agent}_{args.model.replace('/', '_')}_{args.tasks_type}"
+    if args.agent == "react":
+        score = asyncio.run(mcpagent.run_official(
+            model=args.model, tasks_type=args.tasks_type,
+            concurrency=args.concurrency, num_servers=args.num_servers,
+            output_name=name,
+        ))
+    else:
+        score = asyncio.run(mcpagent.run_veyra(
+            model=args.model, tasks_type=args.tasks_type, policy=args.agent,
+            concurrency=args.concurrency, num_servers=args.num_servers,
+            output_name=name,
+        ))
+    print(f"TFS (model_score from official evaluator): {score}")
+    return 0
+
+
 def cmd_targets(_args: argparse.Namespace) -> int:
     from veyra.bench.targets import checklist
 
@@ -264,6 +287,15 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--kev-endpoint", default="")
     p_serve.add_argument("--bandit-state", default="")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_mcp = sub.add_parser("mcpagentbench", help="official MCPAgentBench (requires ROUTER_API_KEY)")
+    p_mcp.add_argument("--agent", choices=["react", "heuristic", "kev"], default="react")
+    p_mcp.add_argument("--model", required=True, help="model id from MCPAgentBench configs/llm_config.json")
+    p_mcp.add_argument("--tasks_type", default="general_test", choices=["day", "pro", "general_test"])
+    p_mcp.add_argument("--concurrency", type=int, default=None)
+    p_mcp.add_argument("--num_servers", type=int, default=None)
+    p_mcp.add_argument("--output_name", default=None)
+    p_mcp.set_defaults(func=cmd_mcpagentbench)
 
     p_targets = sub.add_parser("targets", help="list the public benchmarks this project is aiming at")
     p_targets.set_defaults(func=cmd_targets)

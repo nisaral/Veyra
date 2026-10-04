@@ -2,7 +2,7 @@
 
 Open-source adaptive agent harness. It chooses the next action — tool, model, verification, retry, or abstention — under cost, latency, permission, and reliability constraints. The decision model returns probabilities. The policy is what acts.
 
-The problem it is for: agents waste calls, retry a bad tool, and act when they should abstain. The number we will publish, once measured, is task success per dollar and wasted calls against a fixed ReAct baseline on MCPAgentBench. That number does not exist yet.
+The problem it is for: agents waste calls, retry a bad tool, and act when they should abstain. The number we will publish, once measured, is TFS and TEFS against vanilla ReAct on official MCPAgentBench, same LLM. That number does not exist yet. The freeze is tag `v0.2.0-pre-mcpagentbench`. The Kev table in `veyra/out/kev/` is `synthetic/scripted`.
 
 The full objective, the arm list, and the benchmark order are in [`veyra/docs/OBJECTIVE.md`](veyra/docs/OBJECTIVE.md). The status of each public benchmark is in [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md). `veyra targets` prints the same checklist.
 
