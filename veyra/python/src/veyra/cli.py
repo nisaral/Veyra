@@ -81,6 +81,19 @@ def cmd_mcpagentbench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_headroom(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from veyra.analysis.headroom import write_report
+
+    trials = Path(args.trials)
+    out = Path(args.out)
+    summary = write_report(trials, out)
+    print(out.read_text(encoding="utf-8"))
+    print("gate1_stop", summary["gate1_stop"])
+    return 0
+
+
 def cmd_targets(_args: argparse.Namespace) -> int:
     from veyra.bench.targets import checklist
 
@@ -300,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
     p_mcp.add_argument("--api-key", default="", help="API key for --base-url (use local for LM Studio)")
     p_mcp.add_argument("--limit", type=int, default=None, help="truncate task file for plumbing smoke only")
     p_mcp.set_defaults(func=cmd_mcpagentbench)
+
+    p_hr = sub.add_parser("headroom", help="Gate 1: net oracle headroom vs same-harness null")
+    p_hr.add_argument("--trials", required=True, help="CSV with columns task,harness,seed,pass,cost")
+    p_hr.add_argument("--out", default="out/headroom.md")
+    p_hr.set_defaults(func=cmd_headroom)
 
     p_targets = sub.add_parser("targets", help="list the public benchmarks this project is aiming at")
     p_targets.set_defaults(func=cmd_targets)
