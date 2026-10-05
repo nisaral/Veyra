@@ -93,6 +93,10 @@ def normalize_model_name(raw_model: str) -> str:
     for prov in ("openai/", "google/", "anthropic/", "mistralai/"):
         if m.startswith(prov):
             m = m[len(prov):]
+    m = m.replace("claude-opus-4-6", "claude-opus-4.6")
+    m = m.replace("claude-opus-4-7", "claude-opus-4.7")
+    m = m.replace("claude-4.6-opus", "claude-opus-4.6")
+    m = m.replace("claude-4.5-sonnet", "claude-sonnet-4.5")
     return m
 
 
@@ -280,20 +284,19 @@ def scan_leaderboard_directory(root_dir: Path) -> list[LeaderboardTrial]:
 
         agent, model = parsed_meta
 
-        # Find result.json files under this submission
-        results = list(sub_dir.glob("**/result.json"))
+        # Find per-task result.json files under this submission (skip top-level run summary result.json)
+        results = [r for r in sub_dir.glob("**/result.json") if len(r.relative_to(sub_dir).parts) > 2]
         if not results:
             continue
 
         # Group by task to verify at least 5 trials per task
         task_results: dict[str, list[tuple[str, Path]]] = defaultdict(list)
         for rpath in results:
-            # We will read task_name from file or fallback to directory
             rel = rpath.relative_to(sub_dir)
             parts = rel.parts
-            seed = parts[0] if len(parts) >= 2 else "1"
-            task_norm = parts[1].split("__")[0] if len(parts) >= 2 and "__" in parts[1] else parts[-2]
-            task_norm = normalize_task_name(task_norm)
+            seed = parts[0]
+            raw_task = parts[1].split("__")[0] if "__" in parts[1] else parts[1]
+            task_norm = normalize_task_name(raw_task)
             task_results[task_norm].append((seed, rpath))
 
         # Filter: submissions must have at least 5 trials per task
