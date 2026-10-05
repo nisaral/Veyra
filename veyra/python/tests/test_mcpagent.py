@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from veyra.bench.mcpagent import bench_root, require_api_key, wrap_tools_with_policy
+from veyra.bench.mcpagent import bench_root, require_llm, wrap_tools_with_policy
 
 
 def test_official_checkout_is_present():
@@ -16,8 +16,13 @@ def test_missing_api_key_is_an_error(monkeypatch):
     monkeypatch.delenv("ROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="No LLM API key"):
-        require_api_key()
+    monkeypatch.delenv("API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="No LLM configured"):
+        require_llm()
+
+
+def test_local_base_url_does_not_need_a_cloud_key():
+    assert require_llm(base_url="http://127.0.0.1:1234/v1", api_key="local") == "local"
 
 
 class _Tool:

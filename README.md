@@ -1,108 +1,66 @@
 # Veyra
 
-Open-source adaptive agent harness. It chooses the next action — tool, model, verification, retry, or abstention — under cost, latency, permission, and reliability constraints. The decision model returns probabilities. The policy is what acts.
+**A switch controller, handoff compiler, and measurement kit for agent harnesses.**
 
-The problem it is for: agents waste calls, retry a bad tool, and act when they should abstain. The number we will publish, once measured, is TFS and TEFS against vanilla ReAct on official MCPAgentBench, same LLM. That number does not exist yet. The freeze is tag `v0.2.0-pre-mcpagentbench`. The Kev table in `veyra/out/kev/` is `synthetic/scripted`.
+Veyra does not replace Claude Code, Codex, OpenHands, Terminus-2, or Omnigent. Those are harnesses. Veyra decides **whether to stay, switch, retry, verify, ask, or stop**, what **state** the next harness is allowed to see, and whether that choice **paid for itself**.
 
-The full objective, the arm list, and the benchmark order are in [`veyra/docs/OBJECTIVE.md`](veyra/docs/OBJECTIVE.md). The status of each public benchmark is in [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md). `veyra targets` prints the same checklist.
-
-The bundled offline suite is a plumbing check, not this claim. On that scripted suite the repair harness reaches 100% at $0.0096 per task, the plain loop 80% at $0.0078, and the graph harness 100% at $0.0190. Do not quote those as the MCPAgentBench result.
+The policy is the only component that may act. A typed decision model (Kev) **scores** candidate items. It never writes the next message and never calls a tool. If the controller errors, times out, or is uncertain, the current harness continues (**fail-open**).
 
 ```bash
 cd veyra
 pip install -e "./python[dev]"
-# Go toolchain once: builds dist/veyra
 cd go && go build -o ../dist/veyra.exe ./cmd/veyra && cd ..
+veyra doctor
 veyra compare --spawn --split dev --out out/dev
-veyra view --runs out/dev
+veyra dashboard --runs out/dev
 ```
 
-The first command is the offline suite. It does not call a model. The trace
-viewer then opens the decision log: candidates, policy drops, and the harness
-switch. Optional scaffolds: `pip install 'veyra[miniswe]'` for the mini-swe-agent
-adapter and `pip install 'veyra[langgraph]'` for the real LangGraph package.
-Neither is required for the offline suite. See [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md).
+No public Harbor or Terminal-Bench number exists yet. Do not quote `out/kev/` or the 30-task suite as one.
 
-`plan.txt` is a rejected superset of this runtime. Do not build the control plane, marketplace, or database stack from it.
+## Why this exists
 
-## Uncertainty-Preserving JEPA Predictor Ensembles
+Same model, different harness, large score gaps (Harbor: e.g. GPT-5.4 on SWE-smith 3.1% vs 22.1%). Switching can look useful because **a second attempt** is useful. Veyra’s job is to measure **net headroom**: the extra success you get from using a *different* harness after subtracting the extra success you get from sampling the *same* harness again — **and** to do it cheaper, with an audit log.
 
-Research project built on [`facebookresearch/eb_jepa`](https://github.com/facebookresearch/eb_jepa),
-targeting `examples/ac_video_jepa` (Impala-RNN predictor, Two Rooms navigation).
+## What ships today (v0.2)
 
-**Status: pre-registration / planning.** No training run has been executed yet.
-The theory artifact runs; every empirical claim below is still a hypothesis with
-a stated falsification bar.
+| Piece | Role |
+|---|---|
+| Go kernel | Loop, budget, fail-open fallback, append-only `events.jsonl` |
+| Python sidecar | Harnesses, Kev client, MCPAgentBench **smoke** adapter |
+| `HandoffV1` | [`veyra/schemas/handoff.v1.json`](veyra/schemas/handoff.v1.json) |
+| Dashboard | Local replay of recorded runs (`veyra dashboard`) |
 
-## The problem
+Reference harnesses (`native`, `repair`, MiniGraph) are for checkpoint/resume tests. Reviewers should treat **mini-swe-agent** (already an adapter) as the first external arm. Omnigent / Claude Code / Codex CLI are the wrap targets, not things to reimplement.
 
-The obvious way to get uncertainty out of a JEPA predictor is to train M >= 2
-prediction heads over the shared encoder and read their disagreement. That does
-not work, and the reason is structural rather than a matter of tuning:
+## Evaluation (Harbor first)
 
-- In `eb_jepa/jepa.py::JEPA.unroll` the prediction loss is **separable across
-  heads** and every head is scored against the same target, so the only global
-  optimum has all heads at the conditional mean. Disagreement is driven to zero.
-- The anti-collapse regularizer is called as `self.regularizer(state, actions)`
-  with `state = self.encoder(observations)`. It never sees the predictor's
-  outputs, so **head-collapse incurs zero regularization penalty**.
-- In JEPA the prediction target is the encoder's own output and the encoder
-  moves during training, so the heads share a moving target. They are **not
-  exchangeable**, which breaks the assumption behind the standard
-  "divide the spread by M" uncertainty estimate.
+Spend **$0** on a notebook over Harbor’s public 8×2×54×3 release before any paid run. Then:
 
-## What this project claims
+1. **Terminal-Bench 2.0** (89 tasks) — Harbor-native, mid-strength model, 20-task cost pilot, then 3 harnesses × 3 seeds.
+2. **One SWE-style Harbor adapter** (~100 tasks, split by **repository**).
+3. **Aider Polyglot** — cheap, large published gaps.
+4. **Harbor-Index** — 82 hard tasks, rescue candidates.
+5. **STT-Arena** — shift and abstain (later; simulated tools).
 
-See `theory/head_collapse_identifiability.py` (runs on CPU in seconds,
-numpy + scipy only):
+MCPAgentBench is a **smoke test**. ToolSandbox, τ-bench, TUA-Bench, SWE-bench come after Gate 1.
 
-| | claim | measured in the artifact |
-|---|---|---|
-| C1 | the stock objective forces disagreement to zero | spread `2.7e-33` at the optimum; Spearman with true error `+0.04` |
-| C2 | the epistemic/aleatoric split is unidentified under a sum-only objective | a zero-loss family spanning 100% to 0% in planner-facing decisions; replicates recover `g` to 0.5% and separate the family by ~8100x |
-| C3 | shared encoder drift makes the divide-by-M estimate inconsistent, and it gets *worse* with M | 99.5% underestimation at M=256 with drift `c=0.5`, versus exact and M-independent at `c=0` |
+**Gate 1 (stop rule):** 95% CI upper bound on *net* headroom &lt; 2pp **and** no cost win at non-inferior success → publish the null, do not train a router.
 
-C3 is the JEPA-specific obstruction: it does not exist in the
-teacher-student/ensemble-distillation setting where the sibling problem was
-previously studied.
+Full spec: [`veyra/docs/OBJECTIVE.md`](veyra/docs/OBJECTIVE.md), [`veyra/docs/BENCHMARKS.md`](veyra/docs/BENCHMARKS.md). Tag `v0.2.0-pre-mcpagentbench` is the freeze before this plan.
 
-## Why Two Rooms can support the fix
+## Resume — what to say about this project
 
-The environment transition is deterministic
-(`env.py::_generate_transition` is `location + action`), so the aleatoric term is
-*not* environment stochasticity. It comes from action-sampling noise (Von Mises
-angle noise, truncated-normal step) and encoder aliasing. Crucially,
-`dot_dataset.py::generate_actions` returns the commanded direction `bias_angle`
-alongside the realised actions, which supplies the replicate structure the
-identifiability fix needs.
+Use these bullets as written. Do not inflate them with unpublished scores.
 
-## Roadmap
+- Built a **Go execution kernel** with a portable state contract, budget ledger, and a policy that is the only actor; decision models cannot invent actions.
+- Defined **HandoffV1** (failed actions, open subgoals, verification) as a versioned schema so a switch is a compiler problem, not a prompt dump.
+- Wired an open **System One** decision model (Kev) as a **selector**, with embedding-pruning as the bar — not as a generative summarizer.
+- Pre-registered a **two-axis gate**: net oracle headroom vs same-harness resampling, plus cost at non-inferior success, with a CI-based stop rule.
+- Shipped a **local dashboard** that replays traces (candidates, policy drops, ledger) for audit without hosting execution.
+- Positioned the work as an **adapter over Harbor agents** (mini-SWE-agent, Terminus-2, later Claude Code / Codex), complementary to Omnigent rather than a second meta-runtime.
 
-| phase | what | gate |
-|---|---|---|
-| 0 | theory artifact | done, assertions pass |
-| 1 | baseline reproduction at reduced batch (T4) | MPPI SR within 5 pts of 97% |
-| 2 | C1 falsifier: disagreement vs rollout error | kills the framing if Spearman > 0.5 |
-| 3 | replicate split training | calibration better than stock |
-| 4 | frozen vs joint uncertainty branch | drift bias shrinks when frozen |
-| 5 | calibration-gated planning compute | equal SR at lower cost |
-| 6 | OOD wall/door stress | pre-registered as likely negative |
+**Do not put on a resume:** “beats ReAct on MCPAgentBench”, “learned policy”, “SWE-bench SOTA”, or the scripted −37.9% / Kev 80% tables.
 
-Full specification, compute budget and related work:
-[`docs/RESEARCH-PLAN-2026-09-28.md`](docs/RESEARCH-PLAN-2026-09-28.md).
+## License
 
-## Reproduce the theory artifact
-
-    python theory/head_collapse_identifiability.py
-
-Verified on Python 3.11.9, numpy 2.1.1, scipy 1.17.1. No GPU, no torch required.
-Interpreter used:
-`C:/Users/nisar/AppData/Local/Microsoft/WindowsApps/python3.11.exe`
-
-## Upstream context
-
-`facebookresearch/eb_jepa` is Apache-2.0, ~790 stars, with no existing issue or
-discussion on uncertainty quantification or ensembling (checked 2026-09-28).
-Upstream issue #31 records that the default example configs assume ~24 GB VRAM;
-the reduced-batch configuration this project needs is itself a useful
-contribution.
+Apache-2.0. See [`veyra/LICENSE`](veyra/LICENSE).

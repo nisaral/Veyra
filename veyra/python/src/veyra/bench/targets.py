@@ -18,20 +18,24 @@ class Target:
 
 
 TARGETS: tuple[Target, ...] = (
-    Target("mcpagentbench", "main external benchmark", "not_run",
-           "official Brunestuder/MCPAgentBench; veyra mcpagentbench --agent react"),
-    Target("bfcl-v4", "tool-selection baseline", "not_run",
-           "Berkeley function-calling leaderboard, multi-turn and agentic splits"),
-    Target("tau-bench", "stateful tool-agent-user", "not_run",
-           "airline, retail, telecom, banking; use the current tau3 release"),
-    Target("toolsandbox", "adaptation and recovery", "not_run",
-           "stateful tools, implicit dependencies, intermediate checks"),
-    Target("veyra-shiftbench", "benchmark this project contributes", "specified",
-           "online tool shifts under a budget and a risk limit"),
-    Target("gaia", "later broad-agent test", "not_scheduled",
-           "general assistant questions; not the first score"),
-    Target("swe-bench", "later generality check", "not_scheduled",
-           "via the mini-swe-agent adapter, after the tool-routing claim"),
+    Target("harbor-public", "step 0, $0 re-analysis", "not_run",
+           "Harbor 8 models × Terminus-2 vs native, 54 benches, 3 trials; oracle vs same-harness null"),
+    Target("terminal-bench-2.0", "first paid Harbor run", "not_run",
+           "89 verifier-scored tasks; pilot 20 then 3 arms × 3 seeds"),
+    Target("swe-harbor", "repo-split SWE-style adapter", "not_run",
+           "~100 tasks through Harbor; split by repository"),
+    Target("aider-polyglot", "cheap gap check", "not_run",
+           "published harness gaps; mid-strength model"),
+    Target("harbor-index", "breadth / rescue pool", "not_run",
+           "82 hard tasks after Terminal-Bench"),
+    Target("stt-arena", "shift and abstain", "not_scheduled",
+           "227 tasks, 30 impossible; simulated tools"),
+    Target("mcpagentbench", "smoke only", "smoke",
+           "not the public claim; Gemma 1-task TFS 0.0 (no native tool calls)"),
+    Target("toolsandbox", "later stateful tools", "not_scheduled",
+           "after Gate 1"),
+    Target("tau-bench", "later user+tool+policy", "not_scheduled",
+           "after Gate 1"),
 )
 
 SHIFTS: tuple[str, ...] = (

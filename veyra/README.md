@@ -2,9 +2,9 @@
 
 **An adaptive agent harness that chooses the next tool, model, verification, retry, or abstention under a budget and a permission check.**
 
-The product objective is in [`docs/OBJECTIVE.md`](docs/OBJECTIVE.md). The public benchmarks and their status are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). `veyra targets` prints the checklist. No public-benchmark number has been measured yet.
+The product objective, Harbor-first evaluation, and Gate 1 stop rule are in [`docs/OBJECTIVE.md`](docs/OBJECTIVE.md). `veyra targets` prints the checklist. No Harbor or Terminal-Bench number has been measured yet.
 
-The v0.1 prototype below answers a narrower pre-registered question about switching coding harnesses:
+The v0.1 prototype below is the kernel that still answers a narrower plumbing question about switching coding harnesses:
 
 > **Can a lightweight, state-dependent controller improve the cost of long-horizon agent
 > execution by switching between execution harnesses without materially reducing task success?**

@@ -1,38 +1,48 @@
 # Objective
 
-Veyra is an open-source adaptive agent harness for cost- and risk-aware tool execution. It chooses the next action — tool, model, verification, retry, or abstention — under cost, latency, permission, and reliability constraints. A decision model returns probabilities. A policy is the only thing allowed to act.
+Veyra is a **switch controller, handoff compiler, and measurement kit** for existing agent harnesses. It is not a rival meta-runtime.
 
-The applied problem: agent workflows waste calls, pick a bad tool, retry it, and keep acting when they should abstain or switch. The measurable goal is higher task success per dollar, with fewer wasted and unsafe actions.
+Databricks Omnigent already sits above Claude Code, Codex, and Pi. Veyra does the three things that layer does not:
 
-This is an applied systems project. The paper-shaped tracks in the rest of this repository are not the product.
+1. **When to switch**, with calibrated risk, fail-open if the controller is uncertain.
+2. **What state crosses** (`HandoffV1`: decisions, failed actions, open subgoals, verification).
+3. **Whether the switch was worth it**: oracle gap with a same-harness null, rescue rate, cost at non-inferior success.
 
-The commit tagged `v0.2.0-pre-mcpagentbench` is the freeze before MCPAgentBench. The table in `out/kev/` is labelled `synthetic/scripted`. Do not quote it as the public result. The next measured number is TFS/TEFS from the official MCPAgentBench evaluator, with a real LLM, ReAct first.
+The decision model (Kev) **selects**. It does not write. An extractor proposes candidate items from the trace; Kev scores which to keep under a budget. The bar is embedding-based pruning, not a generative summarizer.
 
-## What a result has to show
+The kernel policy is the only component that may act. If the controller errors or times out, the current harness continues.
 
-On a fixed model and a fixed tool catalog, compare:
+## What is not a result
 
-| arm | what it is |
+- The bundled 30-task suite and `out/kev/` are **synthetic/scripted**.
+- One MCPAgentBench Gemma smoke (`TFS 0.0` on 1 day task) is plumbing. Gemma did not emit native tool calls. MCPAgentBench is a **smoke test**, not the primary public claim.
+
+## Gate 1 (pre-registered)
+
+Run on Harbor, mid-strength model, at least one **external** harness (mini-swe-agent or Terminus-2) plus Veyra reference harnesses.
+
+| Quantity | Definition |
 |---|---|
-| fixed ReAct | one loop, no router |
-| static tool router | one tool order, no adaptation |
-| Veyra heuristic | hand-written policy over the legal candidates |
-| Veyra decision model | a local Jev-style model (Kev or an equivalent open model) scoring those candidates |
-| Veyra decision model + bandit | the same scores, updated from logged outcomes |
+| Cross-harness oracle | Best of *k* harnesses per task |
+| Same-harness null | Best of *k* seeds of the **same** harness |
+| Net headroom | Cross-harness oracle minus same-harness null |
+| Cost axis | Mean $ at non-inferior success (5pp margin) |
 
-Report task success, tool-selection accuracy, wasted tool calls, cost, latency, recovery after a shift, unsafe actions, and abstentions. Do not publish a headline until that table exists. The scripted 30-task suite under `out/` is a plumbing check. It is not this result.
+**Stop rule:** stop claiming switch value if the 95% CI **upper bound** on net headroom is below 2pp **and** there is no cost win at non-inferior success.
 
-## Proof, in order
+**Rescue rate (handoff, not routing):** stall under H1, fork at a checkpoint to H2 vs fork back to H1 vs fresh restart in H1. Without the same-harness fork, “another attempt” explains the gain.
 
-1. **MCPAgentBench** is the main external benchmark. It already scores candidate-tool discrimination, multi-step tool use, completion, and execution efficiency.
-2. **BFCL v4** is the tool-selection baseline (multi-turn and agentic categories).
-3. **τ-bench (τ³ where that is the current release)** is the stateful user-and-tool benchmark (airline, retail, telecom, banking).
-4. **ToolSandbox** is the adaptation and recovery benchmark: stateful tools, implicit dependencies, intermediate checks.
-5. **Veyra-ShiftBench** is the benchmark this project contributes. The environment changes during the episode: a tool disappears, gets expensive, becomes unreliable, changes schema, loses permission, a new tool appears, or a tool returns a misleading result. The metric is how quickly and cheaply the agent adapts. MCPEvol-Bench studies schema evolution. ShiftBench studies online adaptation under a budget and a risk limit.
-6. **GAIA**, then a **SWE-bench** adapter, come after the tool-routing claim is measured. They show the harness is not limited to one tool catalog. They are not the first score.
+Pilot **20 tasks** to measure $/run before the full matrix.
 
-The README headline, once measured, is success, cost, and wasted calls against a fixed ReAct baseline on MCPAgentBench. Until then the README names the objective and does not invent the number.
+## Releases
 
-## Not this milestone
+| Release | Contents | Gate |
+|---|---|---|
+| v0.3 | Adapters, HandoffV1, shadow mode, trace export | Offline suite green |
+| v0.4 | Headroom report with nulls, outcome-matrix dataset | Gate 1 passed **or published null** |
+| v0.5 | View-spectrum, cost-Pareto | Non-inferiority shown |
+| v1.0 | Learned selector only if it beats embedding pruning | Earned |
 
-A download site and a product dashboard are planned and not started. The trace viewer (`veyra view`) is the local inspection tool until a public result exists. The page, when it exists, should show the benchmark table, the decision trace, and how to install the harness. It should not be built ahead of the Kev arm on MCPAgentBench.
+## Production (do not defer)
+
+Shadow mode, fail-open, irreversibility guard (snapshot before switch), versioned HandoffV1, token/$ caps, OpenTelemetry export, `make reproduce`.

@@ -95,6 +95,7 @@
       <button id="tab-runs">Runs</button>
       <button id="tab-decision">Decision</button>
       <button id="tab-benchmarks">Benchmarks</button>
+      <button id="tab-resume">Resume</button>
       <button id="tab-install">Install</button>
     </nav>
   </aside>
@@ -103,11 +104,12 @@
     <section id="view-runs" hidden></section>
     <section id="view-decision" hidden></section>
     <section id="view-benchmarks" hidden></section>
+    <section id="view-resume" hidden></section>
     <section id="view-install" hidden></section>
   </main>
 </div>
 <script>
-const tabs = ["overview","runs","decision","benchmarks","install"];
+const tabs = ["overview","runs","decision","benchmarks","resume","install"];
 const state = { runs: [], comparison: "", targets: [], version: "", current: null, detail: null };
 tabs.forEach(name => {
   document.getElementById("tab-"+name).onclick = () => show(name);
@@ -134,14 +136,15 @@ async function boot() {
   renderRuns();
   renderBenchmarks();
   renderInstall();
+  renderResume();
   renderDecision();
 }
 function renderOverview() {
   const measured = state.targets.filter(t => t.status === "measured").length;
   const succeeded = state.runs.filter(r => String(r.status).includes("SUCCEED")).length;
   document.getElementById("view-overview").innerHTML = `
-    <h1>Execution harness</h1>
-    <p class="lede">Veyra chooses the next tool, model, verification, retry, or abstention under a budget. The decision model returns probabilities. The policy is what acts. Figures on this page come from the run directory you opened.</p>
+    <h1>Switch controller</h1>
+    <p class="lede">Veyra sits beside a harness, not above a zoo of them. It scores the next action, compiles a HandoffV1 payload if a switch is worth it, and fails open if the controller is unsure. Numbers here are only the directory you opened. Harbor and Terminal-Bench have not been scored.</p>
     <div class="grid">
       <div class="card"><div class="k">Runs in this directory</div><div class="v">${state.runs.length}</div></div>
       <div class="card"><div class="k">Succeeded</div><div class="v">${succeeded}</div></div>
@@ -193,10 +196,23 @@ function renderBenchmarks() {
   const rows = state.targets.map(t => `<tr><td><code>${esc(t.id)}</code></td><td>${esc(t.role)}</td><td>${esc(t.status)}</td><td>${esc(t.upstream)}</td></tr>`).join("");
   document.getElementById("view-benchmarks").innerHTML = `
     <h1>Benchmarks</h1>
-    <p class="lede">A status of not_run means Veyra has no recorded score. The comparison below is only the file sitting next to these runs.</p>
+    <p class="lede">Harbor public data first ($0). Terminal-Bench 2.0 is the first paid run. MCPAgentBench is smoke. Comparison files in this folder may be synthetic/scripted.</p>
     <table><thead><tr><th>Benchmark</th><th>Role</th><th>Status</th><th>What it is</th></tr></thead><tbody>${rows}</tbody></table>
     <h2 style="font-size:16px;margin:22px 0 8px">Comparison file</h2>
     <pre>${esc(state.comparison || "No comparison.md in this directory.")}</pre>`;
+}
+function renderResume() {
+  document.getElementById("view-resume").innerHTML = `
+    <h1>Resume</h1>
+    <p class="lede">Copy these. Do not add unpublished scores.</p>
+    <ul>
+      <li>Go kernel with a portable state contract; the policy is the only actor.</li>
+      <li>HandoffV1 schema: failed actions, open subgoals, verification — a compiler problem, not a prompt dump.</li>
+      <li>Kev as a selector over extracted items; embedding pruning is the bar.</li>
+      <li>Pre-registered gate: net oracle headroom vs same-harness resampling, plus cost at non-inferior success.</li>
+      <li>Local dashboard that replays traces for audit without hosting execution.</li>
+      <li>Adapter over Harbor agents (mini-SWE-agent, Terminus-2), complementary to Omnigent.</li>
+    </ul>`;
 }
 function renderInstall() {
   document.getElementById("view-install").innerHTML = `
