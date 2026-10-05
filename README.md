@@ -14,6 +14,9 @@ veyra doctor
 veyra compare --spawn --split dev --out out/dev
 veyra dashboard --runs out/dev
 veyra headroom --trials path/to/trials.csv
+veyra handoff --events out/dev/runs/<id>/events.jsonl
+# Harbor (after `pip install harbor`):
+# harbor run -d terminal-bench@2.0 -a veyra.harbor_agent:VeyraHarborAgent --n-concurrent 1
 ```
 
 ## Status

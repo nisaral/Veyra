@@ -81,6 +81,16 @@ def cmd_mcpagentbench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_handoff(args: argparse.Namespace) -> int:
+    from veyra.handoff import compile_handoff
+
+    payload = compile_handoff(Path(args.events), to_harness=args.to or None, shadow=not args.act)
+    text = json.dumps(payload, indent=2)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+    return 0
+
+
 def cmd_headroom(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -313,6 +323,13 @@ def main(argv: list[str] | None = None) -> int:
     p_mcp.add_argument("--api-key", default="", help="API key for --base-url (use local for LM Studio)")
     p_mcp.add_argument("--limit", type=int, default=None, help="truncate task file for plumbing smoke only")
     p_mcp.set_defaults(func=cmd_mcpagentbench)
+
+    p_ho = sub.add_parser("handoff", help="compile HandoffV1 from events.jsonl (shadow by default)")
+    p_ho.add_argument("--events", required=True)
+    p_ho.add_argument("--out", default="handoff.json")
+    p_ho.add_argument("--to", default="", help="destination harness id")
+    p_ho.add_argument("--act", action="store_true", help="mark shadow=false (still does not execute a switch)")
+    p_ho.set_defaults(func=cmd_handoff)
 
     p_hr = sub.add_parser("headroom", help="Gate 1: net oracle headroom vs same-harness null")
     p_hr.add_argument("--trials", required=True, help="CSV with columns task,harness,seed,pass,cost")
