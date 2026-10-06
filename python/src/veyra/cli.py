@@ -187,29 +187,32 @@ def cmd_toolmisuse(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps({k: v.to_dict() for k, v in results.items()}, indent=2))
     else:
-        print("=" * 86)
+        print("=" * 96)
         print("   CONTROLLED COMPARATIVE EVALUATION: ToolMisuseBench (v0.1 Controlled Baseline)")
         print("   Note: In Veyra's controlled ToolMisuseBench evaluation across 60 fault-injected tasks.")
-        print("=" * 86)
-        header = f"{'System Arm':<22} | {'Success':<8} | {'Recoveries':<11} | {'Unsafe Retries':<15} | {'Replans':<8}"
+        print("         Full published benchmark = 6,800 tasks (5,000 train / 800 dev / 1,000 test).")
+        print("=" * 96)
+        header = f"{'System Arm':<22} | {'Success (95% CI)':<19} | {'Recoveries (95% CI)':<22} | {'Unsafe Retries':<15} | {'Replans':<8}"
         print(header)
-        print("-" * 86)
+        print("-" * 96)
         for arm_name, r in results.items():
-            print(f"{arm_name:<22} | {r.task_success_rate:>6.1f}% | {r.boundary_recovery_rate:>10.1f}% | {r.unsafe_retries:>15d} | {r.agent_replans:>8d}")
-        print("=" * 86)
+            succ_str = f"{r.task_success_rate:>5.1f}% [{r.task_success_ci_95[0]:.0f}-{r.task_success_ci_95[1]:.0f}%]"
+            rec_str = f"{r.boundary_recovery_rate:>5.1f}% [{r.boundary_recovery_ci_95[0]:.0f}-{r.boundary_recovery_ci_95[1]:.0f}%]"
+            print(f"{arm_name:<22} | {succ_str:<19} | {rec_str:<22} | {r.unsafe_retries:>15d} | {r.agent_replans:>8d}")
+        print("=" * 96)
 
         # Explicit Denominator Breakdown Table for Reproducibility
         print("\nEXACT FAULT DENOMINATOR REPRODUCTION BREAKDOWN:")
-        print("-" * 86)
+        print("-" * 96)
         den_header = f"{'System Arm':<22} | {'Eligible Injected':<18} | {'Safe Recoveries':<15} | {'Unsafe Interv':<13} | {'Non-Recoverable':<15}"
         print(den_header)
-        print("-" * 86)
+        print("-" * 96)
         for arm_name, r in results.items():
             print(f"{arm_name:<22} | {r.eligible_injected_failures:>18d} | {r.successful_safe_recoveries:>15d} | {r.unsafe_interventions:>13d} | {r.non_recoverable_failures:>15d}")
-        print("-" * 86)
+        print("-" * 96)
         print("Formula: Boundary Recovery Rate = safe recoveries / eligible injected failures")
         print("Safety Invariant: 0 unsafe retries on non-idempotent or non-retryable operations.")
-        print("=" * 86)
+        print("=" * 96)
     return 0
 
 
@@ -220,28 +223,30 @@ def cmd_mcp_real(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps({k: v.to_dict() for k, v in results.items()}, indent=2))
     else:
-        print("=" * 86)
+        print("=" * 96)
         print("   REAL MCP CATALOGS VALIDATION: 3 Environments (Filesystem, Database, API)")
         print("   Evaluates existing FastMCP tools under transparent Veyra execution boundary.")
-        print("=" * 86)
-        header = f"{'System Arm':<22} | {'Success':<8} | {'Recoveries':<11} | {'Unsafe Retries':<15} | {'Replans':<8}"
+        print("=" * 96)
+        header = f"{'System Arm':<22} | {'Success (95% CI)':<19} | {'Recoveries (95% CI)':<22} | {'Unsafe Retries':<15} | {'Replans':<8}"
         print(header)
-        print("-" * 86)
+        print("-" * 96)
         for arm_name, r in results.items():
-            print(f"{arm_name:<22} | {r.task_success_rate:>6.1f}% | {r.boundary_recovery_rate:>10.1f}% | {r.unsafe_retries:>15d} | {r.agent_replans:>8d}")
-        print("=" * 86)
+            succ_str = f"{r.task_success_rate:>5.1f}% [{r.task_success_ci_95[0]:.0f}-{r.task_success_ci_95[1]:.0f}%]"
+            rec_str = f"{r.boundary_recovery_rate:>5.1f}% [{r.boundary_recovery_ci_95[0]:.0f}-{r.boundary_recovery_ci_95[1]:.0f}%]"
+            print(f"{arm_name:<22} | {succ_str:<19} | {rec_str:<22} | {r.unsafe_retries:>15d} | {r.agent_replans:>8d}")
+        print("=" * 96)
 
         print("\nEXACT FAULT DENOMINATOR REPRODUCTION BREAKDOWN:")
-        print("-" * 86)
+        print("-" * 96)
         den_header = f"{'System Arm':<22} | {'Eligible Injected':<18} | {'Safe Recoveries':<15} | {'Unsafe Interv':<13} | {'Non-Recoverable':<15}"
         print(den_header)
-        print("-" * 86)
+        print("-" * 96)
         for arm_name, r in results.items():
             print(f"{arm_name:<22} | {r.eligible_injected_failures:>18d} | {r.successful_safe_recoveries:>15d} | {r.unsafe_interventions:>13d} | {r.non_recoverable_failures:>15d}")
-        print("-" * 86)
+        print("-" * 96)
         print("Formula: Boundary Recovery Rate = safe recoveries / eligible injected failures")
         print("Safety Invariant: 0 unsafe retries recorded for Veyra across real catalogs.")
-        print("=" * 86)
+        print("=" * 96)
     return 0
 
 

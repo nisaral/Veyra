@@ -24,9 +24,24 @@ from veyra.boundary.retry import SafeRetryPolicy
 from veyra.boundary.taxonomy import FailureClassification, FailureKind, VeyraBoundaryError, classify_exception
 
 
+def compute_wilson_ci(k: int, n: int, confidence: float = 0.95) -> tuple[float, float]:
+    """Compute 95% Wilson score confidence interval for binomial proportion."""
+    if n <= 0:
+        return 0.0, 0.0
+    z = 1.95996  # 95% confidence
+    p = k / n
+    denom = 1 + (z**2) / n
+    center = (p + (z**2) / (2 * n)) / denom
+    half_width = (z * ((p * (1 - p) / n + (z**2) / (4 * n**2)) ** 0.5)) / denom
+    lower = max(0.0, (center - half_width) * 100.0)
+    upper = min(100.0, (center + half_width) * 100.0)
+    return round(lower, 1), round(upper, 1)
+
+
 class RealMCPArm(str, Enum):
     RAW_AGENT = "raw_agent"
     NAIVE_RETRY = "naive_retry"
+    COMPETENT_BASELINE = "competent_baseline"
     STRUCTURED_FEEDBACK = "structured_feedback"
     VEYRA = "veyra"
 
@@ -70,8 +85,16 @@ class RealMCPResult:
         return (self.task_success_count / max(1, self.tasks_count)) * 100.0
 
     @property
+    def task_success_ci_95(self) -> tuple[float, float]:
+        return compute_wilson_ci(self.task_success_count, self.tasks_count)
+
+    @property
     def boundary_recovery_rate(self) -> float:
         return (self.boundary_recoveries / max(1, self.eligible_failures_denominator)) * 100.0
+
+    @property
+    def boundary_recovery_ci_95(self) -> tuple[float, float]:
+        return compute_wilson_ci(self.boundary_recoveries, self.eligible_failures_denominator)
 
     @property
     def avg_latency_ms(self) -> float:
@@ -83,6 +106,7 @@ class RealMCPResult:
             "tasks_count": self.tasks_count,
             "task_success_count": self.task_success_count,
             "task_success_rate": f"{self.task_success_rate:.1f}%",
+            "task_success_ci_95": self.task_success_ci_95,
             "schema_failures": self.schema_failures,
             "precondition_failures": self.precondition_failures,
             "timeout_failures": self.timeout_failures,
@@ -98,6 +122,7 @@ class RealMCPResult:
             "unsafe_interventions": self.unsafe_interventions,
             "non_recoverable_failures": self.non_recoverable_failures,
             "boundary_recovery_rate": f"{self.boundary_recovery_rate:.1f}%",
+            "boundary_recovery_ci_95": self.boundary_recovery_ci_95,
             "avg_latency_ms": f"{self.avg_latency_ms:.2f}ms",
         }
 
@@ -106,12 +131,12 @@ def run_real_mcp_benchmark(
     scenarios: list[RealMCPTask] | None = None,
     catalog_mgr: RealMCPCatalogManager | None = None,
 ) -> dict[str, RealMCPResult]:
-    """Run comparative evaluation across the 4 system arms on real MCP environments."""
+    """Run comparative evaluation across the 5 system arms on real MCP environments."""
     tasks = scenarios or get_real_mcp_scenarios()
     mgr = catalog_mgr or RealMCPCatalogManager()
     results: dict[str, RealMCPResult] = {}
 
-    for arm in (RealMCPArm.RAW_AGENT, RealMCPArm.NAIVE_RETRY, RealMCPArm.STRUCTURED_FEEDBACK, RealMCPArm.VEYRA):
+    for arm in (RealMCPArm.RAW_AGENT, RealMCPArm.NAIVE_RETRY, RealMCPArm.COMPETENT_BASELINE, RealMCPArm.STRUCTURED_FEEDBACK, RealMCPArm.VEYRA):
         res = RealMCPResult(arm=arm, tasks_count=len(tasks))
 
         # Count eligible and non-recoverable failures from scenario ground-truth
@@ -225,6 +250,44 @@ def _execute_arm_task(
 
         if success:
             stats.task_success_count += 1
+        else:
+            stats.agent_replans += 1
+
+    # -------------------------------------------------------------
+    # System C: COMPETENT BOUNDARY BASELINE (Standard engineering implementation: safe coercion, safe idempotent retry, 0 unsafe retries)
+    # -------------------------------------------------------------
+    elif arm == RealMCPArm.COMPETENT_BASELINE:
+        coerced_args = dict(task.arguments)
+        for k, v in coerced_args.items():
+            prop = descriptor.input_schema.get("properties", {}).get(k, {})
+            if prop.get("type") == "integer" and isinstance(v, str) and v.isdigit():
+                coerced_args[k] = int(v)
+            elif prop.get("type") == "string" and isinstance(v, str):
+                coerced_args[k] = v.strip()
+
+        attempts = 0
+        success = False
+        max_attempts = 3 if task.is_retryable and task.is_idempotent else 1
+
+        while attempts < max_attempts:
+            attempts += 1
+            if attempts > 1:
+                stats.retry_count += 1
+            try:
+                raw_mcp_call(**coerced_args)
+                success = True
+                break
+            except Exception as exc:
+                clf = classify_exception(exc)
+                if clf.kind == FailureKind.SCHEMA_ERROR:
+                    stats.schema_failures += 1
+                elif clf.kind == FailureKind.PRECONDITION_ERROR:
+                    stats.precondition_failures += 1
+
+        if success:
+            stats.task_success_count += 1
+            if task.eligible_for_boundary_recovery:
+                stats.boundary_recoveries += 1
         else:
             stats.agent_replans += 1
 

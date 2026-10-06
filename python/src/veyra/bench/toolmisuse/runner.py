@@ -30,9 +30,24 @@ from veyra.boundary.retry import SafeRetryPolicy
 from veyra.boundary.taxonomy import FailureKind, VeyraBoundaryError
 
 
+def compute_wilson_ci(k: int, n: int, confidence: float = 0.95) -> tuple[float, float]:
+    """Compute 95% Wilson score confidence interval for binomial proportion."""
+    if n <= 0:
+        return 0.0, 0.0
+    z = 1.95996  # 95% confidence
+    p = k / n
+    denom = 1 + (z**2) / n
+    center = (p + (z**2) / (2 * n)) / denom
+    half_width = (z * ((p * (1 - p) / n + (z**2) / (4 * n**2)) ** 0.5)) / denom
+    lower = max(0.0, (center - half_width) * 100.0)
+    upper = min(100.0, (center + half_width) * 100.0)
+    return round(lower, 1), round(upper, 1)
+
+
 class SystemArm(str, Enum):
     RAW_AGENT = "raw_agent"
     NAIVE_RETRY = "naive_retry"
+    COMPETENT_BASELINE = "competent_baseline"
     STRUCTURED_FEEDBACK = "structured_feedback"
     VEYRA = "veyra"
 
@@ -97,8 +112,16 @@ class ArmResult:
         return (self.task_success_count / max(1, self.tasks_count)) * 100.0
 
     @property
+    def task_success_ci_95(self) -> tuple[float, float]:
+        return compute_wilson_ci(self.task_success_count, self.tasks_count)
+
+    @property
     def boundary_recovery_rate(self) -> float:
         return (self.boundary_recoveries / max(1, self.eligible_failures_denominator)) * 100.0
+
+    @property
+    def boundary_recovery_ci_95(self) -> tuple[float, float]:
+        return compute_wilson_ci(self.boundary_recoveries, self.eligible_failures_denominator)
 
     @property
     def avg_latency_ms(self) -> float:
@@ -110,6 +133,7 @@ class ArmResult:
             "tasks_count": self.tasks_count,
             "task_success_count": self.task_success_count,
             "task_success_rate": f"{self.task_success_rate:.1f}%",
+            "task_success_ci_95": self.task_success_ci_95,
             "invalid_calls": self.invalid_calls,
             "policy_violations": self.policy_violations,
             "harmful_interventions": self.harmful_interventions,
@@ -122,6 +146,7 @@ class ArmResult:
             "unsafe_interventions": self.unsafe_interventions,
             "non_recoverable_failures": self.non_recoverable_failures,
             "boundary_recovery_rate": f"{self.boundary_recovery_rate:.1f}%",
+            "boundary_recovery_ci_95": self.boundary_recovery_ci_95,
             "avg_latency_ms": f"{self.avg_latency_ms:.2f}ms",
         }
 
@@ -224,7 +249,7 @@ def run_toolmisuse_benchmark(tasks: list[ToolMisuseTask] | None = None) -> dict[
     task_suite = tasks or get_default_benchmark_tasks()
     results: dict[str, ArmResult] = {}
 
-    for arm in (SystemArm.RAW_AGENT, SystemArm.NAIVE_RETRY, SystemArm.STRUCTURED_FEEDBACK, SystemArm.VEYRA):
+    for arm in (SystemArm.RAW_AGENT, SystemArm.NAIVE_RETRY, SystemArm.COMPETENT_BASELINE, SystemArm.STRUCTURED_FEEDBACK, SystemArm.VEYRA):
         res = ArmResult(arm=arm, tasks_count=len(task_suite))
 
         # Count eligible and non-recoverable failures from benchmark metadata
@@ -307,7 +332,44 @@ def _execute_arm_task(arm: SystemArm, task: ToolMisuseTask, stats: ArmResult) ->
             stats.agent_replans += 1
             stats.invalid_calls += 1
 
-    # System C: RAW AGENT + STRUCTURED ERROR FEEDBACK (converts error to structured feedback; agent re-plans)
+    # System C: COMPETENT BOUNDARY BASELINE (Standard engineering implementation: standard coercion, safe idempotent retries, 0 unsafe retries)
+    elif arm == SystemArm.COMPETENT_BASELINE:
+        coerced_args = dict(task.proposed_arguments)
+        if fault and fault.fault_type == "schema_type_str":
+            first_key = list(task.proposed_arguments.keys())[0]
+            val = coerced_args.get(first_key)
+            if isinstance(val, str) and val.isdigit():
+                coerced_args[first_key] = int(val)
+
+        attempts = 0
+        success = False
+        max_attempts = 3 if task.is_retryable and task.is_idempotent else 1
+        call_count = 0
+
+        while attempts < max_attempts:
+            attempts += 1
+            if attempts > 1:
+                stats.retry_count += 1
+            try:
+                call_count += 1
+                if fault and fault.fault_type == "transient_503":
+                    if call_count == 1:
+                        raise TimeoutError("503 Service Unavailable upstream")
+                tool_impl(**coerced_args)
+                success = True
+                break
+            except Exception as e:
+                pass
+
+        if success:
+            stats.task_success_count += 1
+            if fault and fault.eligible_for_boundary_recovery:
+                stats.boundary_recoveries += 1
+        else:
+            stats.agent_replans += 1
+            stats.invalid_calls += 1
+
+    # System D: RAW AGENT + STRUCTURED ERROR FEEDBACK (converts error to structured feedback; agent re-plans)
     elif arm == SystemArm.STRUCTURED_FEEDBACK:
         try:
             tool_impl(**task.proposed_arguments)
