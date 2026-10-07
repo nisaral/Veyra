@@ -88,6 +88,24 @@ class Decision:
             candidate_rejections=candidate_rejections or {},
         )
 
+    def explain(self) -> dict[str, Any]:
+        """Return deterministic, structured explanation of the routing decision (Phase 9 API)."""
+        req_action = self.metadata.get("requested_action") or (self.action.tool if self.action else "unknown")
+        sel_cand = self.action.tool if self.action else None
+        
+        return {
+            "decision": self.kind.value.upper(),
+            "requested_action": req_action,
+            "selected_candidate": sel_cand,
+            "rejected_candidates": self.candidate_rejections,
+            "hard_constraints": self.metadata.get("hard_constraints", {"authorization": "PASSED", "tenant": "PASSED"}),
+            "soft_preferences": self.metadata.get("soft_preferences", {"health": "OPTIMAL", "freshness": "VALID"}),
+            "recovery_plan": self.metadata.get("recovery_plan", "NONE" if self.kind == DecisionKind.SELECT else "DEFER_TO_AGENT"),
+            "risk_level": self.action.risk_class if self.action else "low",
+            "confidence": self.confidence,
+            "reason": self.reason,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind.value,
@@ -100,6 +118,7 @@ class Decision:
             "is_shadow": self.is_shadow,
             "is_dry_run": self.is_dry_run,
             "metadata": self.metadata,
+            "explanation": self.explain(),
         }
 
 

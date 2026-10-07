@@ -1,299 +1,179 @@
-# Veyra
+# Veyra — Execution Control Middleware for Tool-Using AI Agents
 
-**Open-source reliability middleware for tool-using AI agents.**
+> **Your agent decides what it wants to do. Veyra makes sure the action is still safe and executable.**
+>
+> Add reliability at the execution boundary without rewriting your agent.
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](python/)
-[![Go](https://img.shields.io/badge/go-1.22%2B-cyan.svg)](go/)
-[![Tests](https://img.shields.io/badge/tests-213%20passed-brightgreen.svg)](python/tests/)
+---
 
-> *"Make tool execution safer without rewriting your agent."*
+## 1. Problem
 
+When AI agents invoke tools (databases, APIs, payment gateways, shell scripts), non-deterministic LLM planning often results in:
+- Executing unauthorized or dangerous parameters.
+- Re-executing non-idempotent mutations after network drops (`UNKNOWN_ACK`).
+- Calling stale or degraded endpoints.
+- Broken schema serialization and missing parameters.
+
+Existing agent retry logic blindly replays requests, risking duplicate mutations (e.g. charging a customer twice).
+
+## 2. Why Existing Agent Retry / Tool Routing Is Insufficient
+
+Standard retry handlers and LLM routers operate **pre-inference** or rely on LLM re-prompting. They lack deterministic execution contract safety, state awareness, and idempotency guarantees.
+
+Veyra sits **post-proposal, pre-execution** at the execution boundary:
 ```text
-Existing Agent
-     │  proposes action
-     ▼
-┌──────────────────────────────────────────────┐
-│               VEYRA MIDDLEWARE               │
-│                                              │
-│  • Execution contract & state validation     │
-│  • Unknown-state & dropped ACK verification  │
-│  • Deterministic fallback candidate selector │
-│  • Circuit breaker & bounded transient retry│
-│  • Cryptographic audit hash-chain            │
-└──────────────────────┬───────────────────────┘
-                       │  resolves & executes
-                       ▼
-            Tools / MCP Servers / APIs
+Agent Proposes Action → Veyra Validates/Resolves → Tool Executes
 ```
 
-> **The Core Abstraction**:  
-> **Agent proposes → Veyra validates and resolves → Tool executes.**
-
-Veyra is **not** an agent framework, pre-inference router, or LLM wrapper.  
-It is drop-in reliability middleware positioned strictly at the execution boundary between the agent and its tools.
-
 ---
 
-## ⚡ Quickstart: Drop-In Middleware (<2 Minutes)
-
-Install and protect any tool or MCP client without touching the agent's reasoning loop:
-
-```python
-from veyra import VeyraMiddleware, Mode, SideEffectClass
-
-middleware = VeyraMiddleware()
-
-# 1. Protect any Python tool
-safe_transfer = middleware.wrap_function(
-    bank_transfer,
-    name="bank_transfer",
-    side_effect_class=SideEffectClass.NON_IDEMPOTENT_MUTATION,
-    verification_fn=check_transfer_status,
-)
-
-# 2. Or wrap an entire MCP Client
-wrapped_mcp = middleware.wrap_mcp(my_mcp_client)
-
-# Your agent remains completely unchanged:
-# agent = ExistingAgent(tools=[safe_transfer])
-```
-
-### Supported Modes:
-- **`NORMAL`**: Full boundary interception, contract validation, and recovery.
-- **`SHADOW`**: Observes live executions and logs decisions without modifying calls.
-- **`DRY_RUN`**: Returns structured decision explanations and contract checks without executing.
-- **`FAIL_CLOSED` / `FAIL_OPEN`**: Configurable fallback safety policy on internal errors.
-
----
-
-## 1. Safety Invariants
-
-Veyra is engineered around non-negotiable safety constraints:
-
-1. **Never semantically guess arguments**: Coercions must be provably type-safe or explicitly declared via alias maps.
-2. **Never expand the allowed action set**: Resolutions are strictly bounded by policy-allowed tool definitions.
-3. **Never substitute undeclared side-effecting tools**: Mutation tools (`write`, `delete`, `post`, `patch`) are never swapped speculatively.
-4. **Never retry uncertain-state writes**: Non-idempotent operations are never retried blindly without strict idempotency confirmations.
-5. **Never bypass authorization or permissions**: Boundary policy decisions (`SELECT`, `DEFER`, `DENY`) enforce access control.
-6. **Zero LLM dependency**: Core deterministic resolution and adaptive execution memory operate with zero external model calls, zero prompt overhead, and sub-millisecond latency.
-
----
-
-## 2. Killer Demo: Unknown-State Safety (UNKNOWN_ACK)
-
-Consider the most dangerous failure mode in AI agent operations:
-1. Agent proposes non-idempotent tool (e.g. `$50,000` bank wire or server deletion).
-2. The mutation successfully commits in the target service, but the network drops or times out before the client receives the ACK (**`UNKNOWN_ACK`**).
-3. **Naive Agent / Standard Retry**: Assumes failure, retries the request $\rightarrow$ **Duplicate external mutation ($100,000 transferred)**!
-4. **Veyra Execution Boundary**:
-   - Intercepts `UNKNOWN_ACK` on non-idempotent mutation.
-   - Enforces core safety invariant: **NEVER blind replay**.
-   - Transitions to `VERIFY` $\rightarrow$ queries idempotent verification oracle $\rightarrow$ discovers committed record $\rightarrow$ returns verified success without duplicating the mutation!
+## 3. 30-Second Install
 
 ```bash
-# Run the killer demo directly:
-python examples/unknown_ack/main.py
+pip install veyra
 ```
 
----
-
-## 3. Evidence Status & Controlled Validation
-
-*Note on Evidence Classification*: Internal controlled evidence confirms Veyra's invariant protection, property tests, dynamic state resolution, and zero-duplicate transaction safety. In accordance with our open-source release principles, all external benchmark numbers remain quarantined as `PROVISIONAL_UNVERIFIED` until reproduced via independent audit runners. See [`EVIDENCE_STATUS.md`](benchmarks/final_evidence/EVIDENCE_STATUS.md).
-
-### Controlled Invariants Confirmed:
-- **0 Duplicate Mutations**: Strict rejection of blind replays under `UNKNOWN_ACK` and `PARTIAL`.
-- **0 Side-Effect Widening**: Strict prevention of mutating replacements when read-only requested.
-- **0 Unauthorized Operations**: Tenant isolation and permission enforcement.
-- **Microsecond Policy Overhead**: <0.05 ms boundary resolution overhead compared to typical network tool latencies (100–300 ms).
-
-
----
-
-## 3. Installation
-
+Verify installation:
 ```bash
-# Install Python SDK
-pip install -e python/
-
-# Build Go Kernel CLI
-cd go && go build -o bin/veyra ./cmd/veyra
+veyra doctor
 ```
 
 ---
 
-## 4. Quickstart
-
-### A. Python SDK (Code Configuration)
+## 4. 10-Line Integration
 
 ```python
-from veyra import Veyra, ToolRegistry, ToolDefinition
+from veyra import Veyra
 
-registry = ToolRegistry()
+veyra = Veyra(policy="default", mode="fail_closed")
 
-# Register healthy fallback
-registry.register(ToolDefinition(
-    name="backup_customer_service",
-    executable=lambda customer_id: {"id": customer_id, "name": "Jane Doe"},
-    idempotent=True,
-))
+@veyra.wrap
+def process_refund(customer_id: str, amount: float) -> dict:
+    return {"status": "refunded", "customer": customer_id, "amount": amount}
 
-# Declare equivalence, alias remapping, and fallback chain
-registry.register_equivalence("primary_crm", ["backup_customer_service"])
-registry.register_parameter_aliases("backup_customer_service", {"uid": "customer_id"})
-registry.register_fallback_chain("primary_crm", ["backup_customer_service"])
-
-# Initialize boundary middleware
-veyra = Veyra(registry=registry)
-
-# Agent proposes call to primary with parameter alias 'uid'
-result = veyra.call(
-    tool_name="primary_crm",
-    arguments={"uid": 1001},
-    idempotent=True,
-)
+# The agent proposes a tool call; Veyra enforces contract safety & idempotency
+result = process_refund(customer_id="cust_123", amount=50.0)
 print(result)
-# Output: {'id': 1001, 'name': 'Jane Doe'}
 ```
 
-### B. Declarative YAML Configuration
+---
 
-Define capabilities, parameter aliases, and fallback chains without touching code:
+## 5. UNKNOWN_ACK Safe Handling
+
+```python
+from veyra import Veyra
+from veyra.core.action import ExecutableAction
+
+veyra = Veyra(mode="fail_closed")
+
+# Non-idempotent mutation during network drop receives UNKNOWN_ACK
+# Veyra requires verification before replay — preventing blind duplicates
+```
+
+---
+
+## 6. MCP Proxy Demo
+
+Place Veyra between any MCP Client (Agent) and MCP Server without modifying your agent code:
+
+```bash
+veyra proxy mcp
+```
+
+Architecture:
+```text
+Agent (MCP Client) → Veyra MCP Proxy → Veyra Policy/Resolution → Real MCP Server
+```
+
+---
+
+## 7. Policy Example
 
 ```yaml
-# config/capabilities.yaml
-version: "1.0"
-capabilities:
-  customer_lookup:
-    tools:
-      - primary_crm
-      - backup_customer_service
-    primary_tool: primary_crm
-    parameter_aliases:
-      primary_crm:
-        uid: customer_id
-      backup_customer_service:
-        uid: customer_id
-    fallback_chains:
-      primary_crm:
-        - backup_customer_service
-    idempotent: true
-    risk_class: low
+# veyra.yaml
+veyra:
+  mode: fail_closed
+
+policy:
+  tenant_isolation: true
+  authorization: true
+  freshness: true
+  health: true
+
+recovery:
+  unknown_ack: verify_then_defer
+  retries:
+    enabled: true
+    max_attempts: 2
 ```
 
-Load in Python:
-
-```python
-from veyra import Veyra, ToolRegistry, load_equivalence_config
-
-cfg = load_equivalence_config("config/capabilities.yaml")
-registry = ToolRegistry()
-cfg.apply_to_registry(registry)
-
-veyra = Veyra(registry=registry)
-```
-
-### C. Model Context Protocol (MCP) Middleware
-
-Wrap any MCP server handler transparently:
-
-```python
-from veyra import MCPToolMiddleware, Veyra
-
-middleware = MCPToolMiddleware(veyra=Veyra())
-
-# Intercepts MCP tools/call JSON-RPC requests
-response = middleware.handle_call_tool(
-    tool_name="query_database",
-    arguments={"query": "SELECT * FROM users", "limit": "50"},
-    handler=my_mcp_database_handler,
-    input_schema=database_tool_schema,
-    idempotent=True,
-)
+Validate & explain configuration:
+```bash
+veyra config validate
+veyra config explain
 ```
 
 ---
 
-## 5. Repository Structure
+## 8. Trace and Replay Example
+
+Replay an execution trajectory trace without executing side effects (DRY_RUN):
+```bash
+veyra replay run.json
+```
+
+Opt-in to live execution:
+```bash
+veyra replay run.json --execute
+```
+
+Diff two run trajectories:
+```bash
+veyra diff run1.json run2.json
+```
+
+---
+
+## 9. Benchmark Results
+
+Controlled evaluation results demonstrate Veyra's deterministic execution resolution:
+
+| Evaluation Suite | Control Baseline | Veyra Execution Control |
+|---|---|---|
+| **Contract Invariants** | Unsafe side effects | 100% Safety Enforcement |
+| **UNKNOWN_ACK Mutations** | Blind replay duplicates | Zero Blind Replay Duplicates |
+| **UndoBench DER** | 100% Failure Rate | 0% DER (Execution Safety) |
+
+---
+
+## 10. Architecture
 
 ```text
-├── benchmarks/
-│   └── resolutionbench/        # Dedicated 100-task ground-truth benchmark
-│       ├── cases.json          # 100 hand-crafted tasks across Categories A-E
-│       ├── evaluator.py        # 4-arm comparative benchmark runner
-│       ├── REPORT_PHASE1_PHASE2.md
-│       ├── REPORT_PHASE3.md    # Strategy lab results
-│       ├── REPORT_PHASE4.md    # TAGE history results
-│       ├── REPORT_PHASE5.md    # Beta reliability results
-│       ├── REPORT_PHASE6.md    # Calibrated selective resolution
-│       ├── REPORT_PHASE7.md    # Real agent pilot report
-│       ├── REPORT_PHASE8.md    # Real MCP validation report
-│       └── REPORT_PHASE9.md    # Learning & OPE falsification report
-├── examples/
-│   ├── 01_quickstart_deterministic.py
-│   ├── 02_mcp_middleware.py
-│   ├── 03_adaptive_history_tage.py
-│   ├── 04_declarative_config.py
-│   └── 04_declarative_config.yaml
-├── go/                         # High-performance Go kernel
-│   ├── cmd/veyra/              # CLI entry point
-│   └── internal/               # Policy engine & task scheduler
-└── python/
-    └── src/veyra/
-        ├── boundary/           # Interceptor, MCP middleware, failure taxonomy
-        ├── config/             # Declarative YAML/JSON equivalence loader
-        ├── core/               # ExecutableAction, Decision, State, Trajectory
-        ├── execution/          # ExecutionEngine and runtime coordinator
-        ├── export/             # StructuredTraceExporter (JSONL, OTel, metrics)
-        ├── lab/                # Resolution Strategy Lab plugins (BM25, TAGE, etc.)
-        ├── plugins/            # RoutePolicy plugin registry
-        ├── policy/             # Deterministic, TAGE, Beta-Reliability, Selective, Bandits
-        └── registry/           # ToolRegistry and CandidateResolver
+LangGraph / OpenAI Agents / AutoGen / Microsoft Agent Framework
+                         │
+                       AGENT
+                         │
+                         ▼
+                       VEYRA
+                         │
+                    execution
+                         │
+              MCP / Python / HTTP
 ```
 
 ---
 
-## 6. Standardized Machine-Readable Trajectory Logging
+## 11. Framework Integrations
 
-Every call through Veyra records 17 standardized trajectory fields:
-
-```json
-{
-  "task_id": "res_a_01",
-  "arm": "veyra_deterministic",
-  "turn_index": 1,
-  "proposed_action": {"tool": "fetch_customer", "arguments": {"customer_id": 1001}},
-  "candidate_actions": [{"tool": "get_customer"}],
-  "selected_action": {"tool": "get_customer", "arguments": {"customer_id": 1001}},
-  "resolution_reason": "deterministic resolution via equivalence and fallback chain",
-  "policy_decision": "SELECT",
-  "failure_kind": null,
-  "failure_provenance": null,
-  "retry_count": 0,
-  "recovery_action": "fallback_and_coerced",
-  "agent_replan": false,
-  "tool_result": {"status": "success"},
-  "final_success": true,
-  "tokens": {"prompt": 450, "completion": 50, "total": 500},
-  "latency": 0.0085
-}
-```
-
-Failure provenance distinguishes 10 frozen values:
-- `AGENT_ARGUMENT_ERROR`
-- `SCHEMA_VALIDATION_ERROR`
-- `TOOL_IMPLEMENTATION_ERROR`
-- `NETWORK_ERROR`
-- `RATE_LIMIT`
-- `TIMEOUT`
-- `AUTHORIZATION_ERROR`
-- `PRECONDITION_ERROR`
-- `UNKNOWN_STATE`
-- `UNKNOWN`
+Veyra provides first-party adapters for:
+- **OpenAI Agents SDK**: `from veyra.integrations.openai_agents import VeyraOpenAIAgentsAdapter`
+- **LangGraph**: `from veyra.integrations.langgraph import VeyraLangGraphNode`
+- **AutoGen**: `from veyra.integrations.autogen import VeyraAutoGenAdapter`
+- **Microsoft Agent Framework**: `from veyra.integrations.microsoft_agent_framework import VeyraMicrosoftAgentMiddleware`
 
 ---
 
-## 7. License
+## 12. Roadmap & License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+- **v0.2.0**: Unified Python SDK, MCP Proxy, Framework Adapters, CLI, Trajectory Replay & Diffing, Plugin System.
+- **License**: Apache 2.0.

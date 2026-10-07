@@ -1,4 +1,4 @@
-"""Veyra Idempotency Key Semantics & Management (Section 7).
+"""Veyra Idempotency Key Semantics & Store Abstraction (Section 7 / Phase 12).
 
 Strong Idempotency Invariant:
 The same logical mutation MUST derive the same idempotency key across all retries,
@@ -10,10 +10,13 @@ idempotency_key = sha256(intent_id + tool + canonical_arguments + context_signat
 
 from __future__ import annotations
 
+import abc
 import hashlib
 import json
+import os
+import sqlite3
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 def canonicalize_json(obj: Any) -> str:
@@ -49,10 +52,113 @@ class IdempotencyIdentity:
         return f"idk_{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:24]}"
 
 
+class IdempotencyStore(abc.ABC):
+    """Abstract Idempotency Store Interface (Phase 12)."""
+
+    @abc.abstractmethod
+    def get(self, key: str) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def put(self, key: str, value: Any) -> None:
+        pass
+
+    @abc.abstractmethod
+    def exists(self, key: str) -> bool:
+        pass
+
+
+class InMemoryIdempotencyStore(IdempotencyStore):
+    """Development in-memory idempotency store."""
+
+    def __init__(self):
+        self._store: Dict[str, Any] = {}
+
+    def get(self, key: str) -> Optional[Any]:
+        return self._store.get(key)
+
+    def put(self, key: str, value: Any) -> None:
+        self._store[key] = value
+
+    def exists(self, key: str) -> bool:
+        return key in self._store
+
+
+class FileIdempotencyStore(IdempotencyStore):
+    """Development file-backed idempotency store."""
+
+    def __init__(self, filepath: str = "idempotency_store.json"):
+        self.filepath = filepath
+        self._load()
+
+    def _load(self):
+        if os.path.exists(self.filepath):
+            try:
+                with open(self.filepath, "r", encoding="utf-8") as f:
+                    self._store = json.load(f)
+            except Exception:
+                self._store = {}
+        else:
+            self._store = {}
+
+    def _save(self):
+        with open(self.filepath, "w", encoding="utf-8") as f:
+            json.dump(self._store, f, indent=2)
+
+    def get(self, key: str) -> Optional[Any]:
+        return self._store.get(key)
+
+    def put(self, key: str, value: Any) -> None:
+        self._store[key] = value
+        self._save()
+
+    def exists(self, key: str) -> bool:
+        return key in self._store
+
+
+class SQLiteIdempotencyStore(IdempotencyStore):
+    """Development SQLite-backed idempotency store."""
+
+    def __init__(self, db_path: str = ":memory:"):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path)
+        self._init_db()
+
+    def _init_db(self):
+        with self.conn:
+            self.conn.execute(
+                "CREATE TABLE IF NOT EXISTS idempotency (key TEXT PRIMARY KEY, val TEXT)"
+            )
+
+    def get(self, key: str) -> Optional[Any]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT val FROM idempotency WHERE key = ?", (key,))
+        row = cur.fetchone()
+        if row:
+            try:
+                return json.loads(row[0])
+            except Exception:
+                return row[0]
+        return None
+
+    def put(self, key: str, value: Any) -> None:
+        str_val = json.dumps(value) if not isinstance(value, str) else value
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO idempotency (key, val) VALUES (?, ?)", (key, str_val)
+            )
+
+    def exists(self, key: str) -> bool:
+        cur = self.conn.cursor()
+        cur.execute("SELECT 1 FROM idempotency WHERE key = ?", (key,))
+        return cur.fetchone() is not None
+
+
 class IdempotencyKeyStore:
     """Persistent key store guaranteeing idempotency key stability across retries and restarts."""
 
-    def __init__(self):
+    def __init__(self, backend: Optional[IdempotencyStore] = None):
+        self.backend = backend or InMemoryIdempotencyStore()
         self._store: dict[str, IdempotencyIdentity] = {}
         self._execution_history: dict[str, dict[str, Any]] = {}
 
@@ -64,7 +170,6 @@ class IdempotencyKeyStore:
         context_signature: str = "",
     ) -> IdempotencyIdentity:
         """Retrieve existing idempotency identity for the logical mutation, or create and persist it."""
-        # Key lookup by intent_id + tool
         lookup_key = f"{intent_id}:{tool}"
         if lookup_key in self._store:
             return self._store[lookup_key]
@@ -76,6 +181,7 @@ class IdempotencyKeyStore:
             context_signature=context_signature,
         )
         self._store[lookup_key] = identity
+        self.backend.put(identity.key, {"intent_id": intent_id, "tool": tool, "args": arguments})
         return identity
 
     def record_attempt(self, key: str, attempt_number: int, status: str, result: Any = None) -> None:

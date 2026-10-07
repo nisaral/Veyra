@@ -36,14 +36,23 @@ class Veyra:
 
     def __init__(
         self,
+        policy: Any | None = None,
+        mode: str = "fail_closed",
         recorder: TraceRecorder | TraceSink | None = None,
         retry_policy: SafeRetryPolicy | None = None,
         route_policy: RoutePolicy | None = None,
         registry: ToolRegistry | None = None,
     ):
+        self.mode = mode
         self.registry = registry or ToolRegistry()
         self.retry_policy = retry_policy or SafeRetryPolicy()
-        self.route_policy = route_policy or DeterministicRoutePolicy()
+        if route_policy is not None:
+            self.route_policy = route_policy
+        elif policy is not None and not isinstance(policy, str):
+            self.route_policy = policy
+        else:
+            self.route_policy = DeterministicRoutePolicy()
+
         self.resolver = DeterministicCandidateResolver(self.registry)
         self.recovery_policy = SafeRecoveryPolicy(self.retry_policy)
 
@@ -197,3 +206,18 @@ class Veyra:
         """Directly execute a proposal through Veyra."""
         exec_state = state or ExecutionState()
         return self.engine.execute(proposal=proposal, state=exec_state)
+
+    def wrap_mcp(self, mcp_client: Any) -> Any:
+        """Wrap an MCP client with Veyra policy and execution control."""
+        from veyra.middleware.mcp import MCPWrapper
+        return MCPWrapper(self, mcp_client)
+
+    def wrap_http(self, http_client: Any) -> Any:
+        """Wrap an HTTP client with Veyra policy and execution control."""
+        from veyra.middleware.http import HTTPWrapper
+        return HTTPWrapper(self, http_client)
+
+    def wrap_agent(self, agent: Any) -> Any:
+        """Wrap an AI agent instance with Veyra policy and execution control."""
+        from veyra.middleware.agent import AgentWrapper
+        return AgentWrapper(self, agent)
