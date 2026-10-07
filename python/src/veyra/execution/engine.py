@@ -175,9 +175,11 @@ class ExecutionEngine:
             self.trace_sink.record(trace)
             raise VeyraBoundaryError(clf, original_exc=s_err) from s_err
 
-        # Step 4: Execution Loop with Safe Recovery
+        # Step 4: Execution Loop with Safe Recovery & Declared Fallbacks
         attempt = 1
         executable = resolved_action.executable
+        remaining_fallbacks = [c for c in candidates if c.tool != resolved_action.tool]
+        last_recovery_dec: RecoveryDecision | None = None
 
         while True:
             try:
@@ -190,8 +192,8 @@ class ExecutionEngine:
                 latency_ms = (time.perf_counter() - start_time) * 1000.0
                 decision_label = (
                     "retried_and_succeeded"
-                    if attempt > 1
-                    else ("corrected_and_executed" if corrections else "direct_execution")
+                    if attempt > 1 and resolved_action.tool == proposal.tool
+                    else ("corrected_and_executed" if (corrections or resolved_action.tool != proposal.tool) else "direct_execution")
                 )
                 trace = ExecutionTrace(
                     trace_id=trace_id,
@@ -204,6 +206,7 @@ class ExecutionEngine:
                     policy=type(self.route_policy).__name__,
                     decision=decision_label,
                     failure=None,
+                    recovery=last_recovery_dec.to_dict() if last_recovery_dec else None,
                     latency_ms=latency_ms,
                     attempt=attempt,
                     safe=True,
@@ -232,12 +235,32 @@ class ExecutionEngine:
                     failure=classification,
                     state=state,
                     attempt=attempt,
+                    fallbacks=remaining_fallbacks,
                 )
+                last_recovery_dec = recovery_dec
 
                 if recovery_dec.kind == RecoveryDecisionKind.RETRY:
                     if recovery_dec.delay_sec > 0:
                         time.sleep(recovery_dec.delay_sec)
                     attempt += 1
+                    continue
+
+                if recovery_dec.kind == RecoveryDecisionKind.FALLBACK and recovery_dec.action is not None:
+                    resolved_action = recovery_dec.action
+                    remaining_fallbacks = [c for c in remaining_fallbacks if c.tool != resolved_action.tool]
+                    attempt = 1
+                    fb_schema = resolved_action.metadata.get("schema")
+                    fb_fn = resolved_action.executable
+                    try:
+                        resolved_args, fb_corrections = validate_and_normalize(
+                            proposed_args=resolved_action.arguments,
+                            schema=fb_schema,
+                            fn=fb_fn,
+                        )
+                        corrections.extend(fb_corrections)
+                    except Exception:
+                        resolved_args = dict(resolved_action.arguments)
+                    executable = resolved_action.executable
                     continue
 
                 # Unrecoverable -> strictly escalate structured error

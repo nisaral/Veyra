@@ -26,11 +26,19 @@ class CandidateResolver(ABC):
         pass
 
 
-class DeterministicCandidateResolver(CandidateResolver):
-    """Resolves declared tools and declared equivalents subject to strict hard constraints.
+from veyra.baseline.competent import coerce_argument_types
 
-    Safety Invariant:
-    A routing/decision component must NEVER widen the policy-allowed action space.
+
+class DeterministicCandidateResolver(CandidateResolver):
+    """Resolves declared tools and declared equivalents subject to strict hard constraints and safety invariants.
+
+    Safety Invariants:
+    1. NEVER semantically guess arguments.
+    2. NEVER expand the allowed action set.
+    3. NEVER substitute undeclared side-effecting tools.
+    4. NEVER retry uncertain-state writes without strict idempotency.
+    5. NEVER bypass authorization/policy.
+    6. NEVER silently change user intent.
     """
 
     def __init__(self, registry: ToolRegistry):
@@ -41,10 +49,20 @@ class DeterministicCandidateResolver(CandidateResolver):
         proposal: ExecutableAction,
         state: ExecutionState,
     ) -> list[ExecutableAction]:
-        # 1. Determine candidate tool names (primary tool + explicit declared equivalents)
-        candidate_names = self.registry.get_equivalents(proposal.tool)
-        if proposal.tool not in candidate_names:
-            candidate_names = [proposal.tool] + candidate_names
+        # 1. Determine candidate tool names (registered primary tool or declared equivalents + bounded fallbacks)
+        equivs = list(self.registry.get_equivalents(proposal.tool))
+        if self.registry.get(proposal.tool) is not None:
+            candidate_names = [proposal.tool] + [e for e in equivs if e != proposal.tool]
+        else:
+            candidate_names = list(equivs)
+            if proposal.executable is not None or not equivs:
+                candidate_names.append(proposal.tool)
+
+        # Add declared bounded fallbacks
+        fallbacks = self.registry.get_fallback_chain(proposal.tool)
+        for fb in fallbacks:
+            if fb not in candidate_names:
+                candidate_names.append(fb)
 
         # Hard Constraints Filter: Allowed tool set if declared in context
         allowed_tools = state.context.get("allowed_tools")
@@ -57,8 +75,30 @@ class DeterministicCandidateResolver(CandidateResolver):
         for name in candidate_names:
             tool_def = self.registry.get(name)
 
-            # Metadata from definition or proposal
             if tool_def is not None:
+                # Invariant 3 & 6: Never substitute undeclared side-effecting tools and never silently change intent
+                prop_def = self.registry.get(proposal.tool)
+                canon_name = self.registry._canonical_lookup.get(proposal.tool, proposal.tool)
+                canon_def = self.registry.get(canon_name)
+                if "idempotent" in proposal.metadata:
+                    prop_idempotent = proposal.is_idempotent
+                elif prop_def is not None:
+                    prop_idempotent = prop_def.idempotent
+                elif canon_def is not None:
+                    prop_idempotent = canon_def.idempotent
+                else:
+                    prop_idempotent = proposal.is_idempotent
+
+                if tool_def.idempotent != prop_idempotent:
+                    # Cannot substitute read for mutation or mutation for read
+                    continue
+
+                if not tool_def.idempotent and name != proposal.tool:
+                    declared_equivs = self.registry.get_equivalents(proposal.tool)
+                    if name not in declared_equivs:
+                        # Deny undeclared mutation substitution!
+                        continue
+
                 # Hard Constraint 1: Health check
                 if not tool_def.healthy:
                     continue
@@ -73,6 +113,24 @@ class DeterministicCandidateResolver(CandidateResolver):
                 if max_risk == "low" and tool_def.risk_class in ("medium", "high", "destructive"):
                     continue
 
+                # Parameter alias mapping for this candidate
+                alias_map = self.registry.get_parameter_aliases(name)
+                remapped_args = dict(proposal.arguments)
+                for prop_arg, canon_arg in alias_map.items():
+                    if prop_arg in remapped_args and canon_arg not in remapped_args:
+                        remapped_args[canon_arg] = remapped_args.pop(prop_arg)
+
+                # Schema compatibility & safe coercion
+                schema = tool_def.schema
+                coerced_args = coerce_argument_types(remapped_args, schema)
+
+                # Check required arguments
+                if schema:
+                    required = schema.get("required") or schema.get("parameters", {}).get("required", [])
+                    # Invariant 1: NEVER semantically guess arguments!
+                    if any(req not in coerced_args for req in required):
+                        continue
+
                 metadata = {
                     "idempotent": tool_def.idempotent,
                     "retryable": tool_def.retryable,
@@ -84,18 +142,21 @@ class DeterministicCandidateResolver(CandidateResolver):
                     "equivalence_group": self.registry._canonical_lookup.get(name),
                 }
                 executable = tool_def.executable
+                final_args = remapped_args
             else:
-                # If tool not registered in registry, fall back to proposal's own metadata
+                # Tool not registered, fall back to proposal's own metadata
                 metadata = dict(proposal.metadata)
                 executable = proposal.executable
+                final_args = dict(proposal.arguments)
 
             resolved_candidates.append(
                 ExecutableAction(
                     tool=name,
-                    arguments=dict(proposal.arguments),
+                    arguments=final_args,
                     metadata=metadata,
                     executable=executable,
                 )
             )
 
         return resolved_candidates
+

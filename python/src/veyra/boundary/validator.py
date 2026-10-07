@@ -86,6 +86,12 @@ def normalize_value(val: Any, target_type: str | type, allowed_enums: list[Any] 
             val_clean = val.strip()
             if re.match(r"^-?\d+$", val_clean):
                 return int(val_clean)
+            try:
+                f = float(val_clean)
+                if f.is_integer():
+                    return int(f)
+            except ValueError:
+                pass
         if isinstance(val, float) and val.is_integer():
             return int(val)
         raise SchemaValidationError(f"Cannot safely coerce '{val}' ({type(val).__name__}) to integer")

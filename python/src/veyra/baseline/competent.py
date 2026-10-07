@@ -40,8 +40,17 @@ def coerce_argument_types(args: dict[str, Any], schema: dict[str, Any] | None) -
 
         # 1. Integer coercion
         if expected_type in ("integer", "int"):
-            if isinstance(val, str) and val.strip().lstrip("-").isdigit():
-                coerced[prop_name] = int(val.strip())
+            if isinstance(val, str):
+                val_clean = val.strip()
+                if val_clean.lstrip("-").isdigit():
+                    coerced[prop_name] = int(val_clean)
+                else:
+                    try:
+                        f = float(val_clean)
+                        if f.is_integer():
+                            coerced[prop_name] = int(f)
+                    except ValueError:
+                        pass
             elif isinstance(val, float) and val.is_integer():
                 coerced[prop_name] = int(val)
 

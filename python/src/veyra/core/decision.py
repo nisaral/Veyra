@@ -79,6 +79,10 @@ class RecoveryDecision:
         return cls(kind=RecoveryDecisionKind.RETRY, action=action, delay_sec=delay_sec, reason=reason)
 
     @classmethod
+    def fallback(cls, action: ExecutableAction, reason: str = "fallback to declared candidate") -> RecoveryDecision:
+        return cls(kind=RecoveryDecisionKind.FALLBACK, action=action, reason=reason)
+
+    @classmethod
     def escalate(cls, reason: str = "unrecoverable at boundary") -> RecoveryDecision:
         return cls(kind=RecoveryDecisionKind.ESCALATE_TO_AGENT, action=None, reason=reason)
 

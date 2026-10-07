@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from veyra.boundary.retry import SafeRetryPolicy
-from veyra.boundary.taxonomy import FailureClassification, FailureKind
+from veyra.boundary.taxonomy import FailureClassification, FailureKind, FailureProvenance
 from veyra.core.action import ExecutableAction
 from veyra.core.decision import RecoveryDecision, RecoveryDecisionKind
 from veyra.core.state import ExecutionState
@@ -28,6 +28,7 @@ class RecoveryPolicy(ABC):
         failure: FailureClassification,
         state: ExecutionState,
         attempt: int,
+        fallbacks: list[ExecutableAction] | None = None,
     ) -> RecoveryDecision:
         """Decide recovery action upon execution failure."""
         pass
@@ -45,8 +46,9 @@ class SafeRecoveryPolicy(RecoveryPolicy):
         failure: FailureClassification,
         state: ExecutionState,
         attempt: int,
+        fallbacks: list[ExecutableAction] | None = None,
     ) -> RecoveryDecision:
-        # Check safety invariants via retry policy
+        # Check safety invariants via retry policy for the failed action
         is_safe = self.retry_policy.is_safe_to_retry(
             classification=failure,
             is_idempotent=failed_action.is_idempotent,
@@ -62,7 +64,33 @@ class SafeRecoveryPolicy(RecoveryPolicy):
                 reason=f"safe retry allowed ({failure.kind.value}) on attempt {attempt}",
             )
 
-        # Unsafe or non-retryable failure -> strictly escalate to agent
+        # If primary retry is not safe or exhausted, check if safe fallback is available
+        if fallbacks:
+            for candidate in fallbacks:
+                # Safety Invariant 4: Never retry/substitute uncertain-state writes without strict idempotency
+                if not failed_action.is_idempotent and (
+                    failure.provenance in (FailureProvenance.TIMEOUT, FailureProvenance.UNKNOWN_STATE, FailureProvenance.UNKNOWN)
+                    or failure.kind == FailureKind.UNKNOWN_STATE
+                ):
+                    # Write may have partially succeeded; cannot safely fall back to another mutating call!
+                    break
+
+                # Safety Invariant 3: Never substitute undeclared side-effecting tools
+                if not candidate.is_idempotent:
+                    # Side-effecting candidates must match the declared equivalence group
+                    if candidate.equivalence_group != failed_action.equivalence_group:
+                        continue
+
+                # Candidate must not be the failed tool itself
+                if candidate.tool == failed_action.tool:
+                    continue
+
+                return RecoveryDecision.fallback(
+                    action=candidate,
+                    reason=f"safe fallback from failed '{failed_action.tool}' ({failure.kind.value}) to declared candidate '{candidate.tool}'",
+                )
+
+        # Unsafe or non-retryable failure with no valid fallback -> strictly escalate to agent
         return RecoveryDecision.escalate(
             reason=f"failure [{failure.kind.value}] is unrecoverable at boundary: {failure.message}"
         )

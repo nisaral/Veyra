@@ -35,6 +35,10 @@ class ToolRegistry:
         self._equivalences: dict[str, list[str]] = {}
         # Reverse mapping: tool_name -> canonical_name
         self._canonical_lookup: dict[str, str] = {}
+        # Parameter aliases: tool_name/canonical -> {alias_key: canonical_key}
+        self._param_aliases: dict[str, dict[str, str]] = {}
+        # Bounded fallback chains: primary_tool -> [fallback_1, fallback_2]
+        self._fallback_chains: dict[str, list[str]] = {}
 
     def register(self, tool: ToolDefinition) -> None:
         self._tools[tool.name] = tool
@@ -59,6 +63,28 @@ class ToolRegistry:
         """Return all declared equivalent tools for a given tool name."""
         canonical = self._canonical_lookup.get(name, name)
         return self._equivalences.get(canonical, [name])
+
+    def register_parameter_aliases(self, tool_name: str, alias_map: dict[str, str]) -> None:
+        """Register explicit parameter aliases (e.g. {'account_id': 'id', 'filename': 'path'})."""
+        self._param_aliases[tool_name] = dict(alias_map)
+
+    def get_parameter_aliases(self, tool_name: str) -> dict[str, str]:
+        """Return parameter alias mappings for a tool or its canonical equivalent."""
+        canonical = self._canonical_lookup.get(tool_name, tool_name)
+        merged = {}
+        if canonical in self._param_aliases:
+            merged.update(self._param_aliases[canonical])
+        if tool_name in self._param_aliases:
+            merged.update(self._param_aliases[tool_name])
+        return merged
+
+    def register_fallback_chain(self, primary_tool: str, fallback_tools: list[str]) -> None:
+        """Register ordered bounded fallback chain (e.g. ['query_primary_db', 'query_replica_db'])."""
+        self._fallback_chains[primary_tool] = list(fallback_tools)
+
+    def get_fallback_chain(self, primary_tool: str) -> list[str]:
+        """Return declared fallback chain for a tool."""
+        return self._fallback_chains.get(primary_tool, [])
 
     def list_tools(self) -> list[ToolDefinition]:
         return list(self._tools.values())

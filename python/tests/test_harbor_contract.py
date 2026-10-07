@@ -26,6 +26,9 @@ try:
 except ImportError:
     _HAS_HARBOR = False
 
+if not _HAS_HARBOR:
+    pytest.skip("harbor is not installed", allow_module_level=True)
+
 
 class FakeEnvironment(BaseEnvironment):
     """Minimal fake environment conforming to Harbor's BaseEnvironment."""
