@@ -52,6 +52,7 @@ from veyra.policy import (
     ToolReliabilityTracker,
     classify_risk,
 )
+from veyra.production.production_layer import Mode, ProductionConfig, VeyraMiddleware
 from veyra.registry import (
     CandidateResolver,
     DeterministicCandidateResolver,
@@ -64,6 +65,9 @@ __version__ = "1.0.0"
 __all__ = [
     # Top-level boundary middleware
     "Veyra",
+    "VeyraMiddleware",
+    "ProductionConfig",
+    "Mode",
     "MCPToolMiddleware",
     "VeyraBoundaryError",
     # Core abstractions

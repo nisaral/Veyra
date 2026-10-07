@@ -51,6 +51,7 @@ class ExecutionContract:
     min_reliability: float | None = None
     expected_output_type: str | None = None
     allowed_tools: list[str] | None = None  # Explicit authorized tool set
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_action(cls, action: ExecutableAction) -> ExecutionContract:

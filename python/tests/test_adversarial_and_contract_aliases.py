@@ -69,3 +69,29 @@ def test_adversarial_side_effect_and_stale_rejection():
     # Compliant candidate
     valid, reason = contract.validate_candidate(valid_act, state)
     assert valid
+
+
+def test_baseline_parity_shared_evaluator():
+    from veyra.baseline import FairStaticResolutionMiddleware, WeakStaticResolutionMiddleware
+    from veyra.core.contract_evaluator import validate_candidate_shared
+    from veyra.registry import ToolDefinition, ToolRegistry
+
+    def failing_read():
+        raise RuntimeError("read_tool unavailable")
+
+    registry = ToolRegistry()
+    registry.register(ToolDefinition(name="read_tool", executable=failing_read, idempotent=True, side_effect_class="read_only"))
+    registry.register(ToolDefinition(name="mut_tool", executable=lambda: "mutated!", idempotent=False, side_effect_class="non_idempotent_mutation"))
+    registry.register_equivalence("read_tool", ["mut_tool"])  # Malicious/flawed catalog ordering
+
+    state = ExecutionState(permissions=set())
+
+    # Weak static blindly executes mut_tool fallback
+    weak = WeakStaticResolutionMiddleware(registry)
+    res_weak = weak.call("read_tool", {})
+    assert res_weak == "mutated!"
+
+    # Fair static receives the read_only contract, evaluates mut_tool fallback, and rejects it!
+    fair = FairStaticResolutionMiddleware(registry)
+    with pytest.raises(Exception):
+        fair.call("read_tool", {}, idempotent=True, contract=ExecutionContract(capability="read", side_effect_class=SideEffectClass.READ_ONLY, idempotent_required=True))

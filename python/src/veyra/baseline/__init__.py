@@ -8,11 +8,17 @@ Defines the 4 explicit benchmark arms:
 """
 
 from veyra.baseline.competent import CompetentBaselineMiddleware, coerce_argument_types, is_idempotent
-from veyra.baseline.static_resolution import StaticResolutionMiddleware
+from veyra.baseline.static_resolution import (
+    FairStaticResolutionMiddleware,
+    StaticResolutionMiddleware,
+    WeakStaticResolutionMiddleware,
+)
 
 __all__ = [
     "CompetentBaselineMiddleware",
     "StaticResolutionMiddleware",
+    "FairStaticResolutionMiddleware",
+    "WeakStaticResolutionMiddleware",
     "coerce_argument_types",
     "is_idempotent",
 ]

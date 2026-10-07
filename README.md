@@ -1,38 +1,69 @@
 # Veyra
 
-**Vendor-Neutral Tool-Boundary Reliability and Resolution Layer for AI Agents**
+**Open-source reliability middleware for tool-using AI agents.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](python/)
 [![Go](https://img.shields.io/badge/go-1.22%2B-cyan.svg)](go/)
-[![Tests](https://img.shields.io/badge/tests-181%20passed-brightgreen.svg)](python/tests/)
+[![Tests](https://img.shields.io/badge/tests-213%20passed-brightgreen.svg)](python/tests/)
+
+> *"Make tool execution safer without rewriting your agent."*
 
 ```text
 Existing Agent
      │  proposes action
      ▼
-┌────────────────────────┐
-│         VEYRA          │
-│                        │
-│ • Schema validation    │
-│ • Parameter aliasing   │
-│ • Equivalence mapping  │
-│ • Safe fallbacks       │
-│ • Failure taxonomy     │
-│ • Idempotency guard    │
-└───────────┬────────────┘
-            │  resolves & executes
-            ▼
-   Tools / MCP Servers / APIs
+┌──────────────────────────────────────────────┐
+│               VEYRA MIDDLEWARE               │
+│                                              │
+│  • Execution contract & state validation     │
+│  • Unknown-state & dropped ACK verification  │
+│  • Deterministic fallback candidate selector │
+│  • Circuit breaker & bounded transient retry│
+│  • Cryptographic audit hash-chain            │
+└──────────────────────┬───────────────────────┘
+                       │  resolves & executes
+                       ▼
+            Tools / MCP Servers / APIs
 ```
 
 > **The Core Abstraction**:  
-> **Agent proposes → Veyra resolves → Tool executes.**
+> **Agent proposes → Veyra validates and resolves → Tool executes.**
 
-Veyra does **not** replace the agent's reasoning loop, planning, or conversation state.  
-It is **not** a generic LLM router, SaaS gateway, or agent framework.
+Veyra is **not** an agent framework, pre-inference router, or LLM wrapper.  
+It is drop-in reliability middleware positioned strictly at the execution boundary between the agent and its tools.
 
-Veyra sits strictly at the agent/tool boundary. Its distinctive capability is **execution-resolution and continuity when the proposed tool path fails**: resolving parameter aliases, safe schema coercions, equivalent tool substitution, and declared fallback chains.
+---
+
+## ⚡ Quickstart: Drop-In Middleware (<2 Minutes)
+
+Install and protect any tool or MCP client without touching the agent's reasoning loop:
+
+```python
+from veyra import VeyraMiddleware, Mode, SideEffectClass
+
+middleware = VeyraMiddleware()
+
+# 1. Protect any Python tool
+safe_transfer = middleware.wrap_function(
+    bank_transfer,
+    name="bank_transfer",
+    side_effect_class=SideEffectClass.NON_IDEMPOTENT_MUTATION,
+    verification_fn=check_transfer_status,
+)
+
+# 2. Or wrap an entire MCP Client
+wrapped_mcp = middleware.wrap_mcp(my_mcp_client)
+
+# Your agent remains completely unchanged:
+# agent = ExistingAgent(tools=[safe_transfer])
+```
+
+### Supported Modes:
+- **`NORMAL`**: Full boundary interception, contract validation, and recovery.
+- **`SHADOW`**: Observes live executions and logs decisions without modifying calls.
+- **`DRY_RUN`**: Returns structured decision explanations and contract checks without executing.
+- **`FAIL_CLOSED` / `FAIL_OPEN`**: Configurable fallback safety policy on internal errors.
 
 ---
 
@@ -49,41 +80,34 @@ Veyra is engineered around non-negotiable safety constraints:
 
 ---
 
-## 2. Empirical Benchmark Evidence: ContinuityBench
+## 2. Killer Demo: Unknown-State Safety (UNKNOWN_ACK)
 
-Veyra is evaluated under a **falsification-first protocol** on **`Veyra-ContinuityBench-v1.0`**—a paired perturbation benchmark (Clean vs. Perturbed execution) spanning 120 tasks across Repair, Gate, and strictly held-out Scorecard splits.
+Consider the most dangerous failure mode in AI agent operations:
+1. Agent proposes non-idempotent tool (e.g. `$50,000` bank wire or server deletion).
+2. The mutation successfully commits in the target service, but the network drops or times out before the client receives the ACK (**`UNKNOWN_ACK`**).
+3. **Naive Agent / Standard Retry**: Assumes failure, retries the request $\rightarrow$ **Duplicate external mutation ($100,000 transferred)**!
+4. **Veyra Execution Boundary**:
+   - Intercepts `UNKNOWN_ACK` on non-idempotent mutation.
+   - Enforces core safety invariant: **NEVER blind replay**.
+   - Transitions to `VERIFY` $\rightarrow$ queries idempotent verification oracle $\rightarrow$ discovers committed record $\rightarrow$ returns verified success without duplicating the mutation!
 
-Crucially, Veyra is benchmarked against **`static_resolution`**—a fair, hard competitor receiving the **EXACT SAME** equivalence declarations, argument aliases, fallback candidates, and hard safety constraints.
+```bash
+# Run the killer demo directly:
+python examples/unknown_ack/main.py
+```
 
-### A. Held-Out Scorecard Results (40 Paired Perturbation Tasks)
+---
 
-| System Arm | Clean-Task Success | Perturbed Success | Intent Preservation Rate (IPR) | Degradation ($\Delta$) | Replan Rate | Unsafe Substitutions |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `raw_agent` | 100.0% | 0.0% | **0.0%** | 100.0% | 100.0% | 0 |
-| `competent_boundary` | 100.0% | 0.0% | **0.0%** | 100.0% | 100.0% | 0 |
-| `static_resolution` | 100.0% | 100.0% | **80.0%** | 0.0% | 0.0% | 0 |
-| **`veyra` (Contract-Aware)** | **100.0%** | **100.0%** | **100.0%** | **0.0%** | **0.0%** | **0** |
-| `oracle` (Sanity Bound) | 100.0% | 100.0% | **100.0%** | 0.0% | 0.0% | 0 |
+## 3. Evidence Status & Controlled Validation
 
-**Why `static_resolution` fails on 20% of cases**:
-Under state and freshness constraints (Perturbations G and I), `static_resolution` blindly picks the first candidate in the fallback list, executing stale endpoints (e.g. freshness 45s > 10s contract limit). Veyra evaluates the **`ExecutionContract`**, detects the invariant violation, filters out stale candidates, and selects the contract-preserving replica, delivering a **+20.0 percentage-point absolute lift**.
+*Note on Evidence Classification*: Internal controlled evidence confirms Veyra's invariant protection, property tests, dynamic state resolution, and zero-duplicate transaction safety. In accordance with our open-source release principles, all external benchmark numbers remain quarantined as `PROVISIONAL_UNVERIFIED` until reproduced via independent audit runners. See [`EVIDENCE_STATUS.md`](benchmarks/final_evidence/EVIDENCE_STATUS.md).
 
-### B. Held-Out TAGE Hypothesis Validation (Scorecard Split)
+### Controlled Invariants Confirmed:
+- **0 Duplicate Mutations**: Strict rejection of blind replays under `UNKNOWN_ACK` and `PARTIAL`.
+- **0 Side-Effect Widening**: Strict prevention of mutating replacements when read-only requested.
+- **0 Unauthorized Operations**: Tenant isolation and permission enforcement.
+- **Microsecond Policy Overhead**: <0.05 ms boundary resolution overhead compared to typical network tool latencies (100–300 ms).
 
-| Resolution Policy | Held-Out IPR | Unsafe Explorations | Decision Latency |
-| :--- | :---: | :---: | :---: |
-| `static_resolution` | 80.0% | 0 | 0.1 $\mu$s |
-| `case_based_memory` | **100.0%** | **0** | 0.1 $\mu$s |
-| **`tage_history`** | **100.0%** | **0** | **0.1 $\mu$s** |
-| `linucb_bandit` | **100.0%** | 0 | 597.4 $\mu$s (~6,000x slower) |
-
-*Finding*: Multi-history execution memory (`tage_history`) matches contextual bandits on unseen states at **sub-microsecond latency** (0.1 $\mu$s) with zero unsafe exploration hazards.
-
-### C. External Benchmark Perturbations & Real LLM Pilot
-
-- **External Generalization**: Validated on 25-task subsets of **Tau2-Bench Verified**, **BFCL Multi-Turn**, and **MCPMark Verified** (+20.0pp IPR lift across all three).
-- **Real LLM Pilot (270 Trajectories: 30 tasks $\times$ 3 arms $\times$ 3 seeds)**: Veyra achieved **100% recovery** (+20pp over static), **0 replans**, **-50.0% agent turns**, and **-48.6% prompt token cost** vs. raw agent.
-- **Decision Gates A–E**: All 5 decision gates (Resolution Capability, Real Agent Effect, External Transfer, Adaptive Value, Product Value) evaluated and **PASSED**. Full report in [`benchmarks/continuitybench/REPORT_CONTINUITYBENCH.md`](benchmarks/continuitybench/REPORT_CONTINUITYBENCH.md).
 
 ---
 
