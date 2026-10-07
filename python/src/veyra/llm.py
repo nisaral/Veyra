@@ -205,7 +205,10 @@ class OpenAICompatibleLLM:
             "messages": chat_messages([{"role": "system", "content": system}] + messages),
             "temperature": 0.0,
         }
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        }
         started = time.perf_counter()
         with httpx.Client(timeout=self.timeout) as client:
             resp = client.post(f"{self.base_url}/chat/completions", json=body, headers=headers)
