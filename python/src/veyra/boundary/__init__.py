@@ -7,6 +7,7 @@ from veyra.boundary.retry import SafeRetryPolicy
 from veyra.boundary.taxonomy import (
     FailureClassification,
     FailureKind,
+    FailureProvenance,
     VeyraBoundaryError,
     classify_exception,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "SafeRetryPolicy",
     "FailureKind",
     "FailureClassification",
+    "FailureProvenance",
     "VeyraBoundaryError",
     "classify_exception",
     "validate_and_normalize",

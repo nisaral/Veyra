@@ -157,7 +157,7 @@ class Veyra:
         self,
         tool_name: str,
         arguments: dict[str, Any],
-        fn: Callable[..., Any],
+        fn: Callable[..., Any] | None = None,
         schema: dict[str, Any] | None = None,
         retryable: bool = False,
         idempotent: bool = False,
@@ -165,6 +165,16 @@ class Veyra:
         state: ExecutionState | None = None,
     ) -> Any:
         """Resolve and execute a proposed tool call through Veyra's execution engine."""
+        executable_fn = fn
+        if executable_fn is None:
+            tool_def = self.registry.get(tool_name)
+            if tool_def is not None and tool_def.executable is not None:
+                executable_fn = tool_def.executable
+                if schema is None:
+                    schema = tool_def.schema
+                retryable = retryable or tool_def.retryable
+                idempotent = idempotent or tool_def.idempotent
+
         action = ExecutableAction(
             tool=tool_name,
             arguments=dict(arguments),
@@ -173,8 +183,17 @@ class Veyra:
                 "idempotent": idempotent,
                 "schema": schema,
             },
-            executable=fn,
+            executable=executable_fn,
         )
 
         exec_state = state or ExecutionState(agent=agent)
         return self.engine.execute(proposal=action, state=exec_state)
+
+    def execute(
+        self,
+        proposal: ExecutableAction,
+        state: ExecutionState | None = None,
+    ) -> Any:
+        """Directly execute a proposal through Veyra."""
+        exec_state = state or ExecutionState()
+        return self.engine.execute(proposal=proposal, state=exec_state)
