@@ -13,14 +13,16 @@ from typing import Any
 
 
 class FailureProvenance(str, enum.Enum):
-    AGENT_ARGUMENT_ERROR = "agent_argument_error"
-    SCHEMA_VALIDATION_ERROR = "schema_validation_error"
-    TOOL_IMPLEMENTATION_ERROR = "tool_implementation_error"
-    NETWORK_ERROR = "network_error"
-    AUTHORIZATION_ERROR = "authorization_error"
-    PRECONDITION_ERROR = "precondition_error"
-    UNKNOWN_STATE = "unknown_state"
-    UNKNOWN = "unknown"
+    AGENT_ARGUMENT_ERROR = "AGENT_ARGUMENT_ERROR"
+    SCHEMA_VALIDATION_ERROR = "SCHEMA_VALIDATION_ERROR"
+    TOOL_IMPLEMENTATION_ERROR = "TOOL_IMPLEMENTATION_ERROR"
+    NETWORK_ERROR = "NETWORK_ERROR"
+    RATE_LIMIT = "RATE_LIMIT"
+    TIMEOUT = "TIMEOUT"
+    AUTHORIZATION_ERROR = "AUTHORIZATION_ERROR"
+    PRECONDITION_ERROR = "PRECONDITION_ERROR"
+    UNKNOWN_STATE = "UNKNOWN_STATE"
+    UNKNOWN = "UNKNOWN"
 
 
 class FailureKind(str, enum.Enum):
@@ -135,7 +137,7 @@ def classify_exception(
         safe = is_idempotent
         return FailureClassification(
             kind=FailureKind.RATE_LIMIT,
-            provenance=FailureProvenance.NETWORK_ERROR,
+            provenance=FailureProvenance.RATE_LIMIT,
             retryable=True,
             repairable=True,
             requires_agent=False,
@@ -184,9 +186,11 @@ def classify_exception(
         term in msg.lower() for term in ("timeout", "timed out", "connection reset", "connection refused", "502", "503", "504", "service unavailable", "bad gateway")
     ):
         safe = is_idempotent and is_declared_retryable
+        is_timeout = isinstance(exc, TimeoutError) or "timeout" in msg.lower() or "timed out" in msg.lower()
+        prov = FailureProvenance.TIMEOUT if is_timeout else FailureProvenance.NETWORK_ERROR
         return FailureClassification(
             kind=FailureKind.TRANSIENT_ERROR,
-            provenance=FailureProvenance.NETWORK_ERROR,
+            provenance=prov,
             retryable=True,
             repairable=True,
             requires_agent=False,
@@ -200,9 +204,11 @@ def classify_exception(
     if isinstance(exc, (TypeError, ValueError, KeyError)) or any(
         term in msg.lower() for term in ("schema", "validation error", "missing argument", "required property", "invalid type", "expected type", "unknown property")
     ):
+        is_schema = any(t in msg.lower() for t in ("schema", "validation error", "missing argument", "required property", "invalid type", "expected type"))
+        prov = FailureProvenance.SCHEMA_VALIDATION_ERROR if is_schema else FailureProvenance.AGENT_ARGUMENT_ERROR
         return FailureClassification(
             kind=FailureKind.SCHEMA_ERROR,
-            provenance=FailureProvenance.AGENT_ARGUMENT_ERROR,
+            provenance=prov,
             retryable=False,
             repairable=True,
             requires_agent=False,

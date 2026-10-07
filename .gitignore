@@ -15,6 +15,7 @@ __pycache__/
 venv/
 
 # local caches + run data
+bench_toolmisuse_official/
 .cache/
 runs/
 data/
