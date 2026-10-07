@@ -49,6 +49,17 @@ def find_mcp_servers_dir() -> Path:
 
 
 def _load_module(module_name: str, file_path: Path):
+    # MCP SDK v2 compatibility shim for legacy FastMCP imports
+    if "mcp.server.fastmcp" not in sys.modules:
+        try:
+            from mcp.server.mcpserver import MCPServer
+            import types
+            fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
+            fastmcp_mod.FastMCP = MCPServer  # type: ignore
+            sys.modules["mcp.server.fastmcp"] = fastmcp_mod
+        except Exception:
+            pass
+
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load module {module_name} from {file_path}")
