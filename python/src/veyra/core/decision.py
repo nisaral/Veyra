@@ -27,30 +27,78 @@ class DecisionKind(str, Enum):
 
 @dataclass
 class Decision:
-    """Outcome of RoutePolicy evaluation."""
+    """Outcome of RoutePolicy evaluation with full explainability."""
 
     kind: DecisionKind
     action: ExecutableAction | None = None
     reason: str = ""
+    confidence: float = 1.0
+    candidate_rejections: dict[str, str] = field(default_factory=dict)
+    policy_version: str = "v1.0"
+    benchmark_version: str = "ContinuityBench-v1.0"
+    is_shadow: bool = False
+    is_dry_run: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def select(cls, action: ExecutableAction, reason: str = "selected by policy") -> Decision:
-        return cls(kind=DecisionKind.SELECT, action=action, reason=reason)
+    def select(
+        cls,
+        action: ExecutableAction,
+        reason: str = "selected by policy",
+        confidence: float = 1.0,
+        candidate_rejections: dict[str, str] | None = None,
+        is_dry_run: bool = False,
+        is_shadow: bool = False,
+    ) -> Decision:
+        return cls(
+            kind=DecisionKind.SELECT,
+            action=action,
+            reason=reason,
+            confidence=confidence,
+            candidate_rejections=candidate_rejections or {},
+            is_dry_run=is_dry_run,
+            is_shadow=is_shadow,
+        )
 
     @classmethod
-    def deny(cls, reason: str = "denied by hard constraints or policy") -> Decision:
-        return cls(kind=DecisionKind.DENY, action=None, reason=reason)
+    def deny(
+        cls,
+        reason: str = "denied by hard constraints or policy",
+        candidate_rejections: dict[str, str] | None = None,
+    ) -> Decision:
+        return cls(
+            kind=DecisionKind.DENY,
+            action=None,
+            reason=reason,
+            confidence=1.0,
+            candidate_rejections=candidate_rejections or {},
+        )
 
     @classmethod
-    def defer(cls, reason: str = "policy deferred to agent/fallback") -> Decision:
-        return cls(kind=DecisionKind.DEFER, action=None, reason=reason)
+    def defer(
+        cls,
+        reason: str = "policy deferred to agent/fallback",
+        candidate_rejections: dict[str, str] | None = None,
+    ) -> Decision:
+        return cls(
+            kind=DecisionKind.DEFER,
+            action=None,
+            reason=reason,
+            confidence=0.5,
+            candidate_rejections=candidate_rejections or {},
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind.value,
             "action": self.action.to_dict() if self.action else None,
             "reason": self.reason,
+            "confidence": self.confidence,
+            "candidate_rejections": self.candidate_rejections,
+            "policy_version": self.policy_version,
+            "benchmark_version": self.benchmark_version,
+            "is_shadow": self.is_shadow,
+            "is_dry_run": self.is_dry_run,
             "metadata": self.metadata,
         }
 

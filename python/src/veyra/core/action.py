@@ -21,7 +21,7 @@ class ExecutableAction:
 
     @property
     def is_idempotent(self) -> bool:
-        return bool(self.metadata.get("idempotent", False))
+        return bool(self.metadata.get("idempotent", self.metadata.get("is_idempotent", False)))
 
     @property
     def is_retryable(self) -> bool:

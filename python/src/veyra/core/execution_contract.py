@@ -147,3 +147,18 @@ class ExecutionContract:
                 return False, f"Output contract mismatch: expected '{self.expected_output_type}', candidate provides '{cand_output}'"
 
         return True, "Execution contract satisfied"
+
+
+# Public aliases for improved discoverability and terminology (Phase 40 Specification)
+ResolutionContract = ExecutionContract
+ActionContract = ExecutionContract
+ExecutionRequirements = ExecutionContract
+
+__all__ = [
+    "SideEffectClass",
+    "ConsistencyModel",
+    "ExecutionContract",
+    "ResolutionContract",
+    "ActionContract",
+    "ExecutionRequirements",
+]
