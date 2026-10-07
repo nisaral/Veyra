@@ -23,6 +23,16 @@ class ToolDefinition:
     permissions: list[str] = field(default_factory=list)
     protocol: str = "python"  # python | mcp
     healthy: bool = True
+    # Phase 14 Execution Contract metadata fields
+    required_state: dict[str, Any] = field(default_factory=dict)
+    freshness_sec: float | None = None
+    consistency: str = "any"
+    side_effect_class: str = "read_only"
+    expected_output: str | None = None
+    cost: float = 0.0
+    latency_ms: float = 0.0
+    reliability: float = 1.0
+    provenance: str = "declared"
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

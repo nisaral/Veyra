@@ -1,13 +1,18 @@
-"""Baseline implementations for tool execution evaluation."""
+"""Veyra Baseline Evaluation Arms (Phase 12 Specification).
 
-from veyra.baseline.competent import (
-    CompetentBaselineMiddleware,
-    coerce_argument_types,
-    is_idempotent,
-)
+Defines the 4 explicit benchmark arms:
+1. raw_agent (no middleware)
+2. competent_boundary (schema validation, safe coercion, retry, idempotency)
+3. static_resolution (same declarations + fallbacks as Veyra, fixed priority)
+4. oracle (ground truth sanity bound)
+"""
+
+from veyra.baseline.competent import CompetentBaselineMiddleware, coerce_argument_types, is_idempotent
+from veyra.baseline.static_resolution import StaticResolutionMiddleware
 
 __all__ = [
     "CompetentBaselineMiddleware",
+    "StaticResolutionMiddleware",
     "coerce_argument_types",
     "is_idempotent",
 ]

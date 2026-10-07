@@ -22,11 +22,13 @@ from veyra.core import (
     Decision,
     DecisionKind,
     ExecutableAction,
+    ExecutionContract,
     ExecutionState,
     ExecutionTrace,
     RecoveryDecision,
     RecoveryDecisionKind,
     ReplanEvent,
+    SideEffectClass,
     TraceSink,
     TrajectoryRecord,
 )
@@ -63,6 +65,8 @@ __all__ = [
     "VeyraBoundaryError",
     # Core abstractions
     "ExecutableAction",
+    "ExecutionContract",
+    "SideEffectClass",
     "ExecutionState",
     "Decision",
     "DecisionKind",

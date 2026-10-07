@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from veyra.core.action import ExecutableAction
+from veyra.core.execution_contract import ExecutionContract
 from veyra.core.state import ExecutionState
 from veyra.registry.tool_registry import ToolRegistry
 
@@ -140,6 +141,16 @@ class DeterministicCandidateResolver(CandidateResolver):
                     "protocol": tool_def.protocol,
                     "schema": tool_def.schema,
                     "equivalence_group": self.registry._canonical_lookup.get(name),
+                    # Phase 14 Execution Contract metadata fields
+                    "required_state": tool_def.required_state,
+                    "freshness_sec": tool_def.freshness_sec,
+                    "consistency": tool_def.consistency,
+                    "side_effect_class": tool_def.side_effect_class,
+                    "expected_output": tool_def.expected_output,
+                    "cost": tool_def.cost,
+                    "latency_ms": tool_def.latency_ms,
+                    "reliability": tool_def.reliability,
+                    "provenance": tool_def.provenance,
                 }
                 executable = tool_def.executable
                 final_args = remapped_args
@@ -149,14 +160,20 @@ class DeterministicCandidateResolver(CandidateResolver):
                 executable = proposal.executable
                 final_args = dict(proposal.arguments)
 
-            resolved_candidates.append(
-                ExecutableAction(
-                    tool=name,
-                    arguments=final_args,
-                    metadata=metadata,
-                    executable=executable,
-                )
+            cand = ExecutableAction(
+                tool=name,
+                arguments=final_args,
+                metadata=metadata,
+                executable=executable,
             )
+
+            # Phase 14: ExecutionContract validation
+            contract = ExecutionContract.from_action(proposal)
+            is_valid, _ = contract.validate_candidate(cand, state)
+            if not is_valid:
+                continue
+
+            resolved_candidates.append(cand)
 
         return resolved_candidates
 

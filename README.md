@@ -49,44 +49,41 @@ Veyra is engineered around non-negotiable safety constraints:
 
 ---
 
-## 2. Empirical Benchmark Evidence
+## 2. Empirical Benchmark Evidence: ContinuityBench
 
-Veyra was evaluated under a **falsification-first protocol** across four distinct benchmarks and pilots:
+Veyra is evaluated under a **falsification-first protocol** on **`Veyra-ContinuityBench-v1.0`**—a paired perturbation benchmark (Clean vs. Perturbed execution) spanning 120 tasks across Repair, Gate, and strictly held-out Scorecard splits.
 
-### A. ResolutionBench v0 (100 Hand-Crafted Ground-Truth Tasks)
-*Evaluates alternate tool resolution, parameter aliases, schema drift, declared fallback chains, and compound failures.*
+Crucially, Veyra is benchmarked against **`static_resolution`**—a fair, hard competitor receiving the **EXACT SAME** equivalence declarations, argument aliases, fallback candidates, and hard safety constraints.
 
-| Benchmark Arm | Category A (Equiv) | Category B (Aliases) | Category C (Schema) | Category D (Fallback) | Category E (Compound) | Overall Recovery | Unsafe Substitutions | Latency |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `raw_llm` | 0.0% (0/20) | 0.0% (0/20) | 0.0% (0/20) | 0.0% (0/20) | 0.0% (0/20) | **0.0% (0/100)** | 0 | 0.01 ms |
-| `competent_baseline` | 0.0% (0/20) | 0.0% (0/20) | 100.0% (20/20) | 0.0% (0/20) | 0.0% (0/20) | **20.0% (20/100)** | 0 | 0.01 ms |
-| **`veyra_deterministic`** | **100.0% (20/20)** | **100.0% (20/20)** | **100.0% (20/20)** | **100.0% (20/20)** | **100.0% (20/20)** | **100.0% (100/100)** | **0** | **8.58 ms** |
-| `oracle` (Sanity Ceiling) | 100.0% (20/20) | 100.0% (20/20) | 100.0% (20/20) | 100.0% (20/20) | 100.0% (20/20) | **100.0% (100/100)** | 0 | 0.01 ms |
+### A. Held-Out Scorecard Results (40 Paired Perturbation Tasks)
 
-*Result*: **+80.0 percentage-point absolute improvement** over a competent middleware baseline with **zero unsafe substitutions** and **zero unauthorized actions**.
+| System Arm | Clean-Task Success | Perturbed Success | Intent Preservation Rate (IPR) | Degradation ($\Delta$) | Replan Rate | Unsafe Substitutions |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `raw_agent` | 100.0% | 0.0% | **0.0%** | 100.0% | 100.0% | 0 |
+| `competent_boundary` | 100.0% | 0.0% | **0.0%** | 100.0% | 100.0% | 0 |
+| `static_resolution` | 100.0% | 100.0% | **80.0%** | 0.0% | 0.0% | 0 |
+| **`veyra` (Contract-Aware)** | **100.0%** | **100.0%** | **100.0%** | **0.0%** | **0.0%** | **0** |
+| `oracle` (Sanity Bound) | 100.0% | 100.0% | **100.0%** | 0.0% | 0.0% | 0 |
 
-### B. Real Agent Pilot (20 Paired Tasks $\times$ 5 Random Seeds)
-*Evaluates boundary resolution against an autonomous ReAct loop on tool failure tasks.*
+**Why `static_resolution` fails on 20% of cases**:
+Under state and freshness constraints (Perturbations G and I), `static_resolution` blindly picks the first candidate in the fallback list, executing stale endpoints (e.g. freshness 45s > 10s contract limit). Veyra evaluates the **`ExecutionContract`**, detects the invariant violation, filters out stale candidates, and selects the contract-preserving replica, delivering a **+20.0 percentage-point absolute lift**.
 
-- **Agent Re-plans**: Eliminated by **100.0%** (25 replans $\to$ **0 replans**).
-- **Model Turns**: Reduced by **-26.7%** (75 turns $\to$ 55 turns).
-- **Prompt Token Savings**: Saved **~10,000 prompt tokens** on recoverable timeouts (-52.6% token cost).
-- **Unsafe Retries**: **0** unsafe operations committed.
+### B. Held-Out TAGE Hypothesis Validation (Scorecard Split)
 
-### C. Real FastMCP Validation (40 Controlled Tasks across 3 Real MCP Servers)
-*Evaluates interoperability across real Filesystem, Database, and API FastMCP servers.*
+| Resolution Policy | Held-Out IPR | Unsafe Explorations | Decision Latency |
+| :--- | :---: | :---: | :---: |
+| `static_resolution` | 80.0% | 0 | 0.1 $\mu$s |
+| `case_based_memory` | **100.0%** | **0** | 0.1 $\mu$s |
+| **`tage_history`** | **100.0%** | **0** | **0.1 $\mu$s** |
+| `linucb_bandit` | **100.0%** | 0 | 597.4 $\mu$s (~6,000x slower) |
 
-- **Task Success**: **65.0%** (+30.0 pp over raw agent).
-- **Boundary Fault Recovery**: **100.0%** (16/16 eligible real-world faults recovered).
-- **Safety Comparison**: `naive_retry` committed **10 data-corrupting retries** on non-idempotent operations; `veyra` committed **0**.
-- **Clean-Task Non-Regression**: 100% direct pass-through on non-faulted tasks with 1.30 ms mean latency.
+*Finding*: Multi-history execution memory (`tage_history`) matches contextual bandits on unseen states at **sub-microsecond latency** (0.1 $\mu$s) with zero unsafe exploration hazards.
 
-### D. Offline Strategy Lab & Off-Policy Evaluation (OPE)
-*Falsification test: Does online reinforcement learning or contextual bandits justify operational complexity?*
+### C. External Benchmark Perturbations & Real LLM Pilot
 
-- **Finding**: Multi-history execution memory (`tage_history`, $H_0, H_1, H_2, H_4, H_8$) and Bradley-Terry ranking achieve identical reward estimation (**DR = 0.6387**) to LinUCB contextual bandits.
-- **Latency Advantage**: TAGE memory executes in **1.1 $\mu$s**, which is **50x faster** than bandit matrix inversions (48–64 $\mu$s).
-- **Conclusion**: Complex RL/online exploration is **not justified** at the execution boundary. Veyra ships with deterministic equivalence and TAGE execution memory.
+- **External Generalization**: Validated on 25-task subsets of **Tau2-Bench Verified**, **BFCL Multi-Turn**, and **MCPMark Verified** (+20.0pp IPR lift across all three).
+- **Real LLM Pilot (270 Trajectories: 30 tasks $\times$ 3 arms $\times$ 3 seeds)**: Veyra achieved **100% recovery** (+20pp over static), **0 replans**, **-50.0% agent turns**, and **-48.6% prompt token cost** vs. raw agent.
+- **Decision Gates A–E**: All 5 decision gates (Resolution Capability, Real Agent Effect, External Transfer, Adaptive Value, Product Value) evaluated and **PASSED**. Full report in [`benchmarks/continuitybench/REPORT_CONTINUITYBENCH.md`](benchmarks/continuitybench/REPORT_CONTINUITYBENCH.md).
 
 ---
 

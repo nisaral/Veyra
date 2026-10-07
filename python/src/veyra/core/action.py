@@ -43,6 +43,54 @@ class ExecutableAction:
     def equivalence_group(self) -> str | None:
         return self.metadata.get("equivalence_group")
 
+    @property
+    def capability(self) -> str | None:
+        return self.metadata.get("capability")
+
+    @property
+    def required_state(self) -> dict[str, Any]:
+        return dict(self.metadata.get("required_state", {}))
+
+    @property
+    def freshness_sec(self) -> float | None:
+        return self.metadata.get("freshness_sec") or self.metadata.get("freshness")
+
+    @property
+    def consistency(self) -> str:
+        return str(self.metadata.get("consistency", "any"))
+
+    @property
+    def permission_scope(self) -> list[str]:
+        return list(self.metadata.get("permission_scope", self.required_permissions))
+
+    @property
+    def side_effect_class(self) -> str:
+        return str(self.metadata.get("side_effect_class", "read_only" if self.is_idempotent else "mutation"))
+
+    @property
+    def expected_output(self) -> str | None:
+        return self.metadata.get("expected_output")
+
+    @property
+    def cost(self) -> float:
+        return float(self.metadata.get("cost", 0.0))
+
+    @property
+    def latency_ms(self) -> float:
+        return float(self.metadata.get("latency_ms", 0.0))
+
+    @property
+    def reliability(self) -> float:
+        return float(self.metadata.get("reliability", 1.0))
+
+    @property
+    def protocol(self) -> str:
+        return str(self.metadata.get("protocol", "python"))
+
+    @property
+    def provenance(self) -> str:
+        return str(self.metadata.get("provenance", "declared"))
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tool": self.tool,

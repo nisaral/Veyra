@@ -133,3 +133,22 @@ class CompetentBaselineMiddleware:
         if last_exc:
             raise last_exc
         raise RuntimeError("Competent baseline: retries exhausted")
+
+    def call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        handler: Callable[[dict[str, Any]], Any],
+        input_schema: dict[str, Any] | None = None,
+        idempotent: bool | None = None,
+    ) -> Any:
+        """Convenience method to coerce arguments and execute with safe retry."""
+        schemas = [{"name": tool_name, **(input_schema or {})}] if input_schema else []
+        _, coerced = self.prepare_action(tool_name, arguments, schemas)
+        res, _, _ = self.execute_with_safe_retry(
+            tool_name,
+            coerced,
+            execute_fn=lambda name, args: handler(args),
+            is_idempotent_override=idempotent,
+        )
+        return res
