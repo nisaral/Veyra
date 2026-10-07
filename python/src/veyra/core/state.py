@@ -23,7 +23,13 @@ class ExecutionState:
 
     @property
     def previous_tools(self) -> list[str]:
-        return [h.get("tool", "") for h in self.history if "tool" in h]
+        tools = []
+        for h in self.history:
+            if isinstance(h, str):
+                tools.append(h)
+            elif isinstance(h, dict) and "tool" in h:
+                tools.append(str(h["tool"]))
+        return tools
 
     def compute_signature(self) -> str:
         """Deterministic fingerprint of state context and recent history."""
