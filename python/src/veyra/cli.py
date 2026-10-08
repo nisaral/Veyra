@@ -695,7 +695,38 @@ def cmd_plugin(args: argparse.Namespace) -> int:
         res = default_plugins.validate(name)
         print(json.dumps(res, indent=2))
     return 0
+def cmd_analyze_tool(args: argparse.Namespace) -> int:
+    from veyra.core.contract_analyzer import ExecutionContractAnalyzer
+    manifest_path = Path(args.manifest)
+    if not manifest_path.exists():
+        print(f"Error: Manifest file '{manifest_path}' does not exist.", file=sys.stderr)
+        return 1
+    manifest = ExecutionContractAnalyzer.load_from_yaml(manifest_path)
+    report = ExecutionContractAnalyzer.analyze(manifest)
 
+    if getattr(args, "json", False):
+        print(report.to_json())
+    else:
+        print(f"\n=== Veyra Execution Contract Audit ===")
+        print(f"Operation:               {report.operation}")
+        print(f"Contract Version:        {report.version}")
+        print(f"Side-Effect Class:       {report.side_effect_class}")
+        print(f"Reversibility:           {report.reversibility}")
+        print(f"Idempotency Key:         {'SUPPORTED' if report.idempotency_supported else 'UNSUPPORTED'}")
+        print(f"Status Probe:            {'SUPPORTED' if report.status_lookup_supported else 'UNSUPPORTED'}")
+        print(f"Read Consistency:        {report.read_back_consistency.upper()}")
+        print(f"Compensation Hook:       {'SUPPORTED' if report.compensation_supported else 'UNSUPPORTED'}")
+        print(f"In-Flight Bound:         {report.in_flight_timeout_ms}ms" if report.in_flight_timeout_ms else "In-Flight Bound:         UNKNOWN")
+        print(f"\nPermissible Actions:     {', '.join(report.permissible_recovery_actions)}")
+        print(f"Prohibited Actions:      {', '.join(report.prohibited_recovery_actions) if report.prohibited_recovery_actions else 'None'}")
+        print(f"\nCertification Grade:     {report.certification_grade}")
+        print(f"Recommendation:          {report.autonomous_recommendation}")
+        if report.missing_guarantees:
+            print("\nMissing Guarantees:")
+            for mg in report.missing_guarantees:
+                print(f"  - [!] {mg}")
+        print("======================================\n")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -884,6 +915,11 @@ def main(argv: list[str] | None = None) -> int:
     p_doc.add_argument("--von-endpoint", default="")
     p_doc.add_argument("--kev-endpoint", default="")
     p_doc.set_defaults(func=cmd_doctor)
+
+    p_an = sub.add_parser("analyze-tool", help="audit tool manifest against Veyra Execution Contract (VEC v1alpha1)")
+    p_an.add_argument("manifest", help="path to contract YAML/JSON manifest")
+    p_an.add_argument("--json", action="store_true", help="output structured JSON")
+    p_an.set_defaults(func=cmd_analyze_tool)
 
     args = parser.parse_args(argv)
     return int(args.func(args) or 0)

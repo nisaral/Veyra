@@ -616,6 +616,133 @@ def run_equal_risk_benchmark() -> dict[str, Any]:
     return frontier
 
 
+def run_noise_matrix_evaluation() -> dict[str, Any]:
+    print("\n--- Running 12-Fault Observation Noise Matrix Evaluation (Phase 2 & Phase 4) ---")
+    from benchmarks.recovery_controller.noise_models.noise_generators import NoiseMode, generate_noisy_scenario_suite
+
+    noise_results: dict[str, Any] = {}
+    arms = {
+        "Full-Mechanism Deterministic": run_full_mechanism_deterministic,
+        "Belief-State Veyra": run_belief_state_veyra,
+    }
+
+    # 1. Evaluate all 12 noise modes (N=100 per mode)
+    for nm in NoiseMode:
+        scenarios = generate_noisy_scenario_suite(n=100, seed=42, noise_mode=nm)
+        noise_results[nm.value] = {}
+        for arm_name, fn in arms.items():
+            res = evaluate_system_on_suite(f"{nm.value}_{arm_name}", fn, scenarios)
+            n_tot = res.n_scenarios
+            obs_dup = res.duplicate_effect_rate
+            # Finite-sample 95% upper confidence bound (Rule of Three if 0)
+            der_ucb = (2.9957 / n_tot) if obs_dup == 0.0 else min(1.0, obs_dup + 1.96 * math.sqrt(obs_dup * (1 - obs_dup) / n_tot))
+            noise_results[nm.value][arm_name] = {
+                "safe_recovery_rate": f"{res.safe_recovery_rate * 100:.1f}%",
+                "observed_DER": f"{obs_dup * 100:.1f}%",
+                "der_95_upper_bound": f"{der_ucb * 100:.2f}%",
+                "abstention_rate": f"{res.abstention_rate * 100:.1f}%",
+            }
+
+    # 2. Evaluate across the full reliability ladder: [1.0, 0.99, 0.95, 0.90, 0.80, 0.70]
+    reliabilities = [1.00, 0.99, 0.95, 0.90, 0.80, 0.70]
+    noise_results["reliability_ladder"] = {}
+    for rel in reliabilities:
+        scs = generate_scenario_suite(n=100, seed=42, probe_reliability=rel)
+        noise_results["reliability_ladder"][f"rel_{rel:.2f}"] = {}
+        for arm_name, fn in arms.items():
+            res = evaluate_system_on_suite(f"rel_{rel}_{arm_name}", fn, scs)
+            n_tot = res.n_scenarios
+            obs_dup = res.duplicate_effect_rate
+            der_ucb = (2.9957 / n_tot) if obs_dup == 0.0 else min(1.0, obs_dup + 1.96 * math.sqrt(obs_dup * (1 - obs_dup) / n_tot))
+            noise_results["reliability_ladder"][f"rel_{rel:.2f}"][arm_name] = {
+                "safe_recovery_rate": f"{res.safe_recovery_rate * 100:.1f}%",
+                "observed_DER": f"{obs_dup * 100:.1f}%",
+                "der_95_upper_bound": f"{der_ucb * 100:.2f}%",
+                "abstention_rate": f"{res.abstention_rate * 100:.1f}%",
+            }
+
+    out_file = OUT_DIR / "results_noise_matrix.json"
+    out_file.write_text(json.dumps(noise_results, indent=2), encoding="utf-8")
+    print(f"Noise matrix evaluation completed. Saved to {out_file}")
+    return noise_results
+
+
+def run_calibration_evaluation() -> dict[str, Any]:
+    print("\n--- Running Belief Calibration Analysis (Phase 6) ---")
+    # Evaluates P(committed | observations) on 500 scenarios
+    scenarios_500: list[Scenario] = []
+    for s in range(1, 11):
+        scenarios_500.extend(generate_scenario_suite(n=50, seed=s))
+
+    from veyra.core.recovery_controller import BeliefStateEstimator
+    estimator = BeliefStateEstimator()
+
+    predictions: list[float] = []
+    actuals: list[float] = []
+
+    for sc in scenarios_500:
+        actual_committed = 1.0 if sc.true_execution_state in (TrueExecutionState.COMMITTED, TrueExecutionState.PARTIAL) else 0.0
+        prior = estimator.initial_belief(sc.failure_mode.value)
+        p_c = prior.p_committed + prior.p_in_flight
+        if sc.verification_available and sc.verification_fn:
+            try:
+                res = sc.verification_fn(**sc.arguments)
+                post = estimator.update_with_evidence(prior, res, probe_reliability=sc.verification_reliability)
+                p_c = post.p_committed
+            except Exception:
+                pass
+        predictions.append(p_c)
+        actuals.append(actual_committed)
+
+    # 1. Brier Score: mean squared error
+    brier_score = sum((p - y) ** 2 for p, y in zip(predictions, actuals)) / len(predictions)
+
+    # 2. Log Loss
+    eps_loss = 1e-6
+    log_loss = -sum(y * math.log(max(p, eps_loss)) + (1 - y) * math.log(max(1 - p, eps_loss)) for p, y in zip(predictions, actuals)) / len(predictions)
+
+    # 3. Expected Calibration Error (ECE) across 10 bins
+    n_bins = 10
+    bin_totals = [0] * n_bins
+    bin_correct = [0.0] * n_bins
+    bin_conf = [0.0] * n_bins
+
+    for p, y in zip(predictions, actuals):
+        b_idx = min(int(p * n_bins), n_bins - 1)
+        bin_totals[b_idx] += 1
+        bin_correct[b_idx] += y
+        bin_conf[b_idx] += p
+
+    ece = 0.0
+    reliability_diagram = []
+    for b_idx in range(n_bins):
+        cnt = bin_totals[b_idx]
+        if cnt > 0:
+            acc = bin_correct[b_idx] / cnt
+            conf = bin_conf[b_idx] / cnt
+            ece += (cnt / len(predictions)) * abs(acc - conf)
+            reliability_diagram.append({
+                "bin": f"[{b_idx/10:.1f}, {(b_idx+1)/10:.1f}]",
+                "count": cnt,
+                "mean_predicted": round(conf, 4),
+                "empirical_accuracy": round(acc, 4),
+            })
+
+    calibration_summary = {
+        "n_evaluations": len(predictions),
+        "brier_score": round(brier_score, 4),
+        "log_loss": round(log_loss, 4),
+        "expected_calibration_error_ece": round(ece, 4),
+        "calibration_status": "WELL_CALIBRATED" if ece < 0.15 else "NEEDS_TEMPERATURE_SCALING",
+        "reliability_diagram": reliability_diagram,
+    }
+
+    out_file = OUT_DIR / "results_calibration.json"
+    out_file.write_text(json.dumps(calibration_summary, indent=2), encoding="utf-8")
+    print(f"Calibration evaluation completed. Saved to {out_file}")
+    return calibration_summary
+
+
 def main() -> int:
     run_benchmark_100()
     run_benchmark_500()
@@ -625,6 +752,8 @@ def main() -> int:
     run_probabilistic_baseline_and_ood()
     run_limbo_late_commit_test()
     run_equal_risk_benchmark()
+    run_noise_matrix_evaluation()
+    run_calibration_evaluation()
     print("\n=======================================================")
     print("ALL RECOVERY CONTROLLER EVALUATIONS COMPLETED SUCCESSFULLY")
     print("=======================================================")

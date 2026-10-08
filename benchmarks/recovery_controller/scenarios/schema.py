@@ -61,6 +61,49 @@ class IdempotencyMode(str, enum.Enum):
     EXPIRED = "EXPIRED"
 
 
+@dataclass(frozen=True)
+class Observation:
+    """Strict execution boundary observation.
+    
+    CRITICAL INVARIANT: Contains ONLY telemetry available to a real runtime client.
+    Guaranteed zero access to true_execution_state or evaluator-only variables.
+    """
+
+    action_id: str
+    tool_name: str
+    arguments: dict[str, Any]
+    failure_mode: str
+    status_code: int | None
+    latency_ms: float
+    is_timeout: bool
+    verification_available: bool
+    idempotency_available: bool
+    idempotency_key: str | None
+    reconciliation_available: bool
+    compensation_available: bool
+    probe_result: dict[str, Any] | None = None
+    probe_freshness_sec: float | None = None
+    probe_latency_ms: float | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action_id": self.action_id,
+            "tool_name": self.tool_name,
+            "arguments": self.arguments,
+            "failure_mode": self.failure_mode,
+            "status_code": self.status_code,
+            "latency_ms": self.latency_ms,
+            "is_timeout": self.is_timeout,
+            "verification_available": self.verification_available,
+            "idempotency_available": self.idempotency_available,
+            "idempotency_key": self.idempotency_key,
+            "reconciliation_available": self.reconciliation_available,
+            "compensation_available": self.compensation_available,
+            "probe_result": self.probe_result,
+        }
+
+
 @dataclass
 class Scenario:
     """Rigorous evaluation scenario schema."""
@@ -102,25 +145,32 @@ class Scenario:
     # Ground truth optimal safe action (For Oracle evaluation)
     expected_safe_action: str = ""
 
+    def to_observation(self, probe_result: dict[str, Any] | None = None) -> Observation:
+        """Constructs the strictly observable client-side telemetry object.
+        
+        Zero leakage: true_execution_state is mathematically excluded.
+        """
+        is_timeout = (self.failure_mode == FailureMode.TIMEOUT)
+        status_code = 504 if is_timeout else (500 if self.failure_mode == FailureMode.HTTP_5XX else None)
+        return Observation(
+            action_id=self.scenario_id,
+            tool_name=self.tool_name,
+            arguments=dict(self.arguments),
+            failure_mode=self.failure_mode.value,
+            status_code=status_code,
+            latency_ms=10500.0 if is_timeout else 120.0,
+            is_timeout=is_timeout,
+            verification_available=self.verification_available,
+            idempotency_available=(self.idempotency_mode == IdempotencyMode.SUPPORTED),
+            idempotency_key=self.idempotency_key,
+            reconciliation_available=self.reconciliation_available,
+            compensation_available=self.compensation_available,
+            probe_result=probe_result,
+        )
+
     def get_public_action_context(self) -> dict[str, Any]:
         """Provides only the information available to the agent/controller at the execution boundary.
         
         Strictly excludes true_execution_state.
         """
-        return {
-            "scenario_id": self.scenario_id,
-            "domain": self.domain,
-            "operation_type": self.operation_type.value,
-            "is_mutation": self.is_mutation,
-            "failure_mode": self.failure_mode.value,
-            "tool_name": self.tool_name,
-            "arguments": self.arguments,
-            "verification_available": self.verification_available,
-            "verification_fn": self.verification_fn,
-            "idempotency_available": self.idempotency_mode == IdempotencyMode.SUPPORTED,
-            "idempotency_key": self.idempotency_key,
-            "reconciliation_available": self.reconciliation_available,
-            "reconciliation_fn": self.reconciliation_fn,
-            "compensation_available": self.compensation_available,
-            "compensation_fn": self.compensation_fn,
-        }
+        return self.to_observation().to_dict()

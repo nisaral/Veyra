@@ -258,11 +258,14 @@ def run_full_mechanism_deterministic(scenario: Scenario) -> tuple[str, float]:
     if not scenario.is_mutation:
         action = "RETRY"
     elif scenario.verification_available and scenario.verification_fn:
-        res = scenario.verification_fn(**scenario.arguments)
-        if res.get("committed", False):
-            action = "VERIFY"
-        else:
-            action = "RETRY"
+        try:
+            res = scenario.verification_fn(**scenario.arguments)
+            if res.get("committed", False):
+                action = "VERIFY"
+            else:
+                action = "RETRY"
+        except Exception:
+            action = "DEFER"
     elif scenario.idempotency_mode.value == "SUPPORTED" and scenario.idempotency_key:
         action = "IDEMPOTENCY_REPLAY"
     elif scenario.reconciliation_available and scenario.reconciliation_fn:
