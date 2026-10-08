@@ -24,15 +24,16 @@ sys.path.insert(0, str(REPO / "python" / "src"))
 sys.path.insert(0, str(REPO))
 
 from benchmarks.recovery_controller.baselines import (
-
     evaluate_action_outcome,
     run_belief_state_veyra,
     run_current_veyra,
     run_idempotency_keys,
+    run_idempotency_keys_unconstrained,
     run_naive_retry,
     run_oracle,
     run_raw_agent,
     run_verify_before_retry,
+    run_verify_before_retry_unconstrained,
 )
 from benchmarks.recovery_controller.metrics import BaselineRunMetric, calculate_wilson_ci
 from benchmarks.recovery_controller.scenarios.generators import generate_scenario_suite
@@ -106,8 +107,10 @@ def run_benchmark_100() -> dict[str, Any]:
     baselines = {
         "Raw Agent": run_raw_agent,
         "Naive Retry": run_naive_retry,
-        "Verify-Before-Retry": run_verify_before_retry,
-        "Idempotency Keys": run_idempotency_keys,
+        "Verify-Before-Retry (B6 Cautious)": run_verify_before_retry,
+        "Verify-Before-Retry (B6 Unconstrained)": run_verify_before_retry_unconstrained,
+        "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
+        "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
         "Current Veyra": run_current_veyra,
         "Belief-State Veyra": run_belief_state_veyra,
         "Oracle": run_oracle,
@@ -137,8 +140,10 @@ def run_benchmark_500() -> dict[str, Any]:
     baselines = {
         "Raw Agent": run_raw_agent,
         "Naive Retry": run_naive_retry,
-        "Verify-Before-Retry": run_verify_before_retry,
-        "Idempotency Keys": run_idempotency_keys,
+        "Verify-Before-Retry (B6 Cautious)": run_verify_before_retry,
+        "Verify-Before-Retry (B6 Unconstrained)": run_verify_before_retry_unconstrained,
+        "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
+        "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
         "Current Veyra": run_current_veyra,
         "Belief-State Veyra": run_belief_state_veyra,
         "Oracle": run_oracle,
@@ -559,6 +564,53 @@ def run_limbo_late_commit_test() -> dict[str, Any]:
     return limbo_results
 
 
+def run_equal_risk_benchmark() -> dict[str, Any]:
+    print("\n--- Running Equal-Risk Benchmark Frontier (Directives §1 & §4) ---")
+    # Generates 500 scenarios across 10 seeds
+    scenarios_500: list[Scenario] = []
+    for s in range(1, 11):
+        scenarios_500.extend(generate_scenario_suite(n=50, seed=s))
+
+    # Evaluate fixed operating points of all systems
+    systems = {
+        "Raw Agent": run_raw_agent,
+        "Naive Retry": run_naive_retry,
+        "Verify-Before-Retry (B6 Cautious)": run_verify_before_retry,
+        "Verify-Before-Retry (B6 Unconstrained)": run_verify_before_retry_unconstrained,
+        "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
+        "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
+        "Current Veyra (Deterministic)": run_current_veyra,
+        "Belief-State Veyra (eps=0.01)": run_belief_state_veyra,
+        "Oracle": run_oracle,
+    }
+
+    # Evaluate each system on the 500 scenarios
+    metrics_map: dict[str, BaselineRunMetric] = {}
+    for name, fn in systems.items():
+        metrics_map[name] = evaluate_system_on_suite(name, fn, scenarios_500)
+
+    # Risk budgets to test: DER == 0.0%, DER <= 0.5%, DER <= 1.0%, DER <= 2.0%, DER <= 4.0%
+    budgets = [0.00, 0.005, 0.01, 0.02, 0.04]
+    frontier: dict[str, Any] = {}
+
+    for b in budgets:
+        b_key = f"DER_budget_{b*100:.1f}%"
+        frontier[b_key] = {}
+        for name, m in metrics_map.items():
+            # If system's empirical DER <= budget, it qualifies at its recovery rate; else disqualified (0.0% recovery feasible)
+            qualifies = m.duplicate_effect_rate <= (b + 1e-6)
+            frontier[b_key][name] = {
+                "empirical_DER": f"{m.duplicate_effect_rate * 100:.2f}%",
+                "safe_recovery_rate": f"{m.safe_recovery_rate * 100:.2f}%" if qualifies else "DISQUALIFIED (Exceeds Risk Budget)",
+                "qualifies": qualifies,
+            }
+
+    out_file = OUT_DIR / "results_equal_risk_frontier.json"
+    out_file.write_text(json.dumps(frontier, indent=2), encoding="utf-8")
+    print(f"Equal-Risk Benchmark Frontier completed. Saved to {out_file}")
+    return frontier
+
+
 def main() -> int:
     run_benchmark_100()
     run_benchmark_500()
@@ -567,6 +619,7 @@ def main() -> int:
     run_probe_reliability_sweep()
     run_probabilistic_baseline_and_ood()
     run_limbo_late_commit_test()
+    run_equal_risk_benchmark()
     print("\n=======================================================")
     print("ALL RECOVERY CONTROLLER EVALUATIONS COMPLETED SUCCESSFULLY")
     print("=======================================================")

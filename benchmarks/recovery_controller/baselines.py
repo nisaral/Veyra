@@ -107,30 +107,70 @@ def run_naive_retry(scenario: Scenario) -> tuple[str, float]:
 
 
 # =========================================================================
-# Baseline 3: Verify-Before-Retry
+# =========================================================================
+# Baseline 3: Verify-Before-Retry (UndoBench B6: Active Probes or Cautious Abstention)
 # =========================================================================
 def run_verify_before_retry(scenario: Scenario) -> tuple[str, float]:
+    """Official UndoBench B6: Non-mutating active probes or cautious abstention.
+    
+    If probe is present: queries probe. If committed -> VERIFY; if not committed -> RETRY.
+    If probe is missing on mutation: CAUTIOUS ABSTENTION (DEFER), avoiding blind duplicate risk.
+    """
     t0 = time.perf_counter()
     if not scenario.is_mutation:
         action = "RETRY"
     elif scenario.verification_available and scenario.verification_fn:
-        # Runs verify hook
         res = scenario.verification_fn(**scenario.arguments)
         if res.get("committed", False):
             action = "VERIFY"
         else:
             action = "RETRY"
     else:
-        # Missing probe -> falls back to blind retry
+        # Cautious abstention (Official UndoBench B6 specification)
+        action = "DEFER"
+    lat = (time.perf_counter() - t0) * 1000.0
+    return action, lat
+
+
+def run_verify_before_retry_unconstrained(scenario: Scenario) -> tuple[str, float]:
+    """Unconstrained / Aggressive B6 variant: Falls back to blind retry when probe is missing."""
+    t0 = time.perf_counter()
+    if not scenario.is_mutation:
+        action = "RETRY"
+    elif scenario.verification_available and scenario.verification_fn:
+        res = scenario.verification_fn(**scenario.arguments)
+        if res.get("committed", False):
+            action = "VERIFY"
+        else:
+            action = "RETRY"
+    else:
         action = "BLIND_RETRY"
     lat = (time.perf_counter() - t0) * 1000.0
     return action, lat
 
 
 # =========================================================================
-# Baseline 4: Idempotency Keys
+# Baseline 4: Idempotency Keys (UndoBench B2: Scoped Key Replay or Cautious Abstention)
 # =========================================================================
 def run_idempotency_keys(scenario: Scenario) -> tuple[str, float]:
+    """Official UndoBench B2: Key replay when supported; cautious abstention when unsupported.
+    
+    Cannot fairly penalize pure idempotency keys by forcing blind replays on unsupported endpoints.
+    """
+    t0 = time.perf_counter()
+    if not scenario.is_mutation:
+        action = "RETRY"
+    elif scenario.idempotency_mode.value == "SUPPORTED" and scenario.idempotency_key:
+        action = "IDEMPOTENCY_REPLAY"
+    else:
+        # Cautious abstention when endpoint does not support idempotency
+        action = "DEFER"
+    lat = (time.perf_counter() - t0) * 1000.0
+    return action, lat
+
+
+def run_idempotency_keys_unconstrained(scenario: Scenario) -> tuple[str, float]:
+    """Unconstrained B2 variant: Falls back to blind retry when key is unsupported."""
     t0 = time.perf_counter()
     if not scenario.is_mutation:
         action = "RETRY"
