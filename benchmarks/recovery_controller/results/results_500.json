@@ -1,0 +1,58 @@
+{
+  "Raw Agent": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "14.00%",
+    "ci_95": "[14.00%, 14.00%]",
+    "mean_duplicate_effect_rate": "36.00%",
+    "mean_unnecessary_abstention_rate": "0.00%"
+  },
+  "Naive Retry": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "14.00%",
+    "ci_95": "[14.00%, 14.00%]",
+    "mean_duplicate_effect_rate": "36.00%",
+    "mean_unnecessary_abstention_rate": "0.00%"
+  },
+  "Verify-Before-Retry": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "80.00%",
+    "ci_95": "[80.00%, 80.00%]",
+    "mean_duplicate_effect_rate": "4.00%",
+    "mean_unnecessary_abstention_rate": "0.00%"
+  },
+  "Idempotency Keys": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "42.00%",
+    "ci_95": "[42.00%, 42.00%]",
+    "mean_duplicate_effect_rate": "30.00%",
+    "mean_unnecessary_abstention_rate": "0.00%"
+  },
+  "Current Veyra": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "42.00%",
+    "ci_95": "[42.00%, 42.00%]",
+    "mean_duplicate_effect_rate": "0.00%",
+    "mean_unnecessary_abstention_rate": "44.00%"
+  },
+  "Belief-State Veyra": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "64.00%",
+    "ci_95": "[64.00%, 64.00%]",
+    "mean_duplicate_effect_rate": "0.00%",
+    "mean_unnecessary_abstention_rate": "22.00%"
+  },
+  "Oracle": {
+    "n_total_scenarios": 500,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "90.00%",
+    "ci_95": "[90.00%, 90.00%]",
+    "mean_duplicate_effect_rate": "0.00%",
+    "mean_unnecessary_abstention_rate": "0.00%"
+  }
+}

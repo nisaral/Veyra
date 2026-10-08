@@ -1,0 +1,51 @@
+{
+  "0.001": {
+    "epsilon": 0.001,
+    "safe_recovery_rate": "62.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "24.0%",
+    "abstention_rate": "35.0%"
+  },
+  "0.005": {
+    "epsilon": 0.005,
+    "safe_recovery_rate": "62.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "24.0%",
+    "abstention_rate": "35.0%"
+  },
+  "0.01": {
+    "epsilon": 0.01,
+    "safe_recovery_rate": "62.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "24.0%",
+    "abstention_rate": "35.0%"
+  },
+  "0.025": {
+    "epsilon": 0.025,
+    "safe_recovery_rate": "62.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "24.0%",
+    "abstention_rate": "35.0%"
+  },
+  "0.05": {
+    "epsilon": 0.05,
+    "safe_recovery_rate": "86.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "0.0%",
+    "abstention_rate": "11.0%"
+  },
+  "0.1": {
+    "epsilon": 0.1,
+    "safe_recovery_rate": "86.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "0.0%",
+    "abstention_rate": "11.0%"
+  },
+  "0.5": {
+    "epsilon": 0.5,
+    "safe_recovery_rate": "86.0%",
+    "duplicate_effect_rate": "0.0%",
+    "unnecessary_abstention_rate": "0.0%",
+    "abstention_rate": "11.0%"
+  }
+}
