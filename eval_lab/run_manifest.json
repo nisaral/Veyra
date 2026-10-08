@@ -73,5 +73,21 @@
     "timestamp": "2026-10-07T23:45:00Z",
     "config_hash": "f6e5d4c3b2a1",
     "trajectory_dir": "eval_lab/out/PLAN_RUN_RESULTS.json"
+  },
+  {
+    "run_id": "run_multi_arm_fault_matrix_5arms",
+    "benchmark": "EvalLab-MultiArmFaultMatrix",
+    "benchmark_version": "v0.2.0",
+    "benchmark_commit": "HEAD",
+    "model": "openai/gpt-4o",
+    "agent": "multi_arm_autonomous_replan",
+    "veyra_commit": "3423e7b",
+    "seed": 0,
+    "environment": "odysseyapi_live_domains",
+    "arm": "A0_through_A4_comparison",
+    "timestamp": "2026-10-08T19:36:54Z",
+    "config_hash": "e8d7c6b5a4f3",
+    "trajectory_dir": "eval_lab/out/multi_arm_fault_matrix_results.json"
   }
 ]
+

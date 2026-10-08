@@ -20,24 +20,47 @@ Agent proposes → Veyra validates/resolves → Tool executes → Veyra verifies
 This scorecard compiles empirical evidence from real models (`openai/gpt-4o` via Odyssey API), real tool environments (stdio MCP Filesystem, SQLite/PostgreSQL transactional ledgers, Git mutations), and official benchmark runners (UndoBench, MCPMark Verified, $\tau^2$-Bench), evaluating Veyra against strong baselines without synthetic inflation.
 
 ### Key Headline Finding:
-> **Veyra provides Execution Insurance across Asymmetric Fault Boundaries.**  
+> **Veyra's Defensible Win: Safe Abstention & Unified Policy Engine Across Fault Boundaries.**  
 > On simple `UNKNOWN_ACK` where verify probes exist, Veyra exhibits **PARITY** with verify-before-retry (0% DER).  
 > However, on **ambiguous faults (missing verify probes / missing idempotency keys)**, naive retry and existing agents suffer **100% duplicate mutations**, whereas Veyra enforces safe abstention (`DEFER`/`DENY`), preserving **0% duplicate effects**. Furthermore, Veyra adds $<0.3\,\text{ms}$ latency overhead and causes $0\%$ false blocks on nominal traffic.
 
 ---
 
-## A. Real Tool Lab: Multi-Domain Mutation Failure Matrix
+## A. Multi-Arm Empirical Fault Matrix (Live `openai/gpt-4o` + Real Domains)
 
-Evaluated across $N=120$ trials per domain with injected `UNKNOWN_ACK` and ambiguous state faults:
+Evaluated across $N=25$ trials per arm on live `openai/gpt-4o` across 3 fault boundaries ([`eval_lab/out/multi_arm_fault_matrix_results.json`](file:///c:/Users/nisar/OneDrive/Desktop/EB-JEPA/veyra/eval_lab/out/multi_arm_fault_matrix_results.json)):
 
-| Use Case / Domain | Mutation Tool & Failure Mode | Raw Agent (A0) | Naive Retry (A1) | Verify-Before-Retry (B6) | Veyra-ZP (A3) | Veyra-Contract (A4) |
+| Arm | Boundary Scenario | Success Rate | Duplicate Rate (DER) | Avg Replans | Avg Tokens | Latency |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1. Payments** | `charge(transfer_id)`<br>Lost ACK after commit | Lost Effect: 100%<br>DER: 0% | DER: 100% [96.9, 100]<br>CRSR: 0% | DER: 0%<br>CRSR: 100% | DER: 0%<br>Abstained (`DEFER`) | DER: 0% [0, 3.1]<br>CRSR: 100% [96.9, 100] |
-| **2. Database** | `UPDATE/INSERT`<br>Connection reset after commit | Lost Effect: 100%<br>DER: 0% | DER: 100%<br>(Duplicate rows) | DER: 0%<br>(Query check) | DER: 0%<br>Abstained (`DEFER`) | DER: 0%<br>CRSR: 100% |
-| **3. Git Mutation** | `git commit`<br>Process crash / timeout | Incomplete state | Conflicts / Duplicate commit | Crash / Stale HEAD | Safe DENY | Clean recovery via ref check |
-| **4. File Overwrite** | `write_file(path)`<br>Stale file state / concurrent | Overwritten blindly | Overwritten blindly | N/A | Abstained | Precondition check blocks blind overwrite |
-| **5. Ticket / Order** | `create_order(id)`<br>5xx gateway timeout | Lost order | Duplicate order created | DER: 0% | DER: 0% | DER: 0% (Idempotency match) |
-| **6. Browser Submit** | `submit_form()`<br>Response lost | Stalled | Duplicate POST form submit | Duplicate POST | Safe DEFER | Form idempotency token check |
+| **A0: Raw Agent (GPT-4o)** | B1: UNKNOWN_ACK (Probe Available) | 0.0% | **100.0%** | 1.0 | 520.0 | 3,544 ms |
+| | B2: Ambiguous (No Probe / Key) | 0.0% | **100.0%** | 1.0 | 524.0 | 3,559 ms |
+| | B4: Type Mismatch | 100.0% | 0.0% | 0.0 | 0.0 | 0.01 ms |
+| **A1: Naive Retry** | B1: UNKNOWN_ACK (Probe Available) | 0.0% | **100.0%** | 1.0 | 0.0 | 0.01 ms |
+| | B2: Ambiguous (No Probe / Key) | 0.0% | **100.0%** | 1.0 | 0.0 | 0.01 ms |
+| | B4: Type Mismatch | 100.0% | 0.0% | 0.0 | 0.0 | 0.01 ms |
+| **A2: Verify-Before-Retry** | B1: UNKNOWN_ACK (Probe Available) | **100.0%** | **0.0%** | 1.0 | 0.0 | 0.01 ms |
+| | B2: Ambiguous (No Probe / Key) | 0.0% | **100.0% (Blind Replay)** | 1.0 | 0.0 | 0.01 ms |
+| | B4: Type Mismatch | 100.0% | 0.0% | 0.0 | 0.0 | 0.01 ms |
+| **A3: Idempotency Key** | B1: UNKNOWN_ACK (Probe Available) | **100.0%** | **0.0%** | 1.0 | 0.0 | 0.01 ms |
+| | B2: Ambiguous (No Probe / Key) | 0.0% | **100.0% (Blind Replay)** | 1.0 | 0.0 | 0.01 ms |
+| | B4: Type Mismatch | 0.0% (Fails) | 0.0% | 0.0 | 0.0 | 0.01 ms |
+| **A4: Veyra Middleware** | B1: UNKNOWN_ACK (Probe Available) | **100.0%** | **0.0%** | **0.0** | **0.0** | **0.24 ms** |
+| | B2: Ambiguous (No Probe / Key) | 0.0% (Safe DEFER) | **0.0% (Protected)** | **0.0** | **0.0** | **0.24 ms** |
+| | B4: Type Mismatch | **100.0%** | **0.0%** | **0.0** | **0.0** | **0.14 ms** |
+
+### The Real Technical Differentiation:
+1. **UNKNOWN_ACK Parity:** On B1 where verify probes exist, $\text{Veyra DER} = \text{B6 DER} = \text{B2 DER} = 0\%$. Veyra does **not** claim superiority here; it matches the strongest bespoke engineering patterns.
+2. **Ambiguous State Superiority:** On B2 where APIs lack verify probes or idempotency keys, naive retry, verify-before-retry, and idempotency handlers fall back to blind retry, causing **100% duplicate mutations**. Veyra enforces **safe abstention (`DEFER`/`DENY`)**, preserving **0% duplicate effects**.
+3. **Execution Policy Engine:** Rather than an ad-hoc retry loop, Veyra implements the canonical decision tree:
+   ```text
+   FAILURE → Can verify?
+             ├── yes → VERIFY
+             └── no  → Idempotent?
+                        ├── yes → REPLAY
+                        └── no  → Compensation available?
+                                   ├── yes → COMPENSATE
+                                   └── no  → DEFER / DENY
+   ```
 
 ---
 
@@ -53,8 +76,6 @@ Comparison on the UndoBench protocol across fault boundaries:
 | **Ambiguous State Safety (No Probe)** | 0.0% DER | 100.0% DER (Crash) | Replays Blind | N/A | **0.0% DER (DENY)** | **0.0% DER (DENY)** |
 | **Control Run Pass Rate** | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | **100.0%** |
 
-*Takeaway:* On single `UNKNOWN_ACK` faults with existing probes, Veyra exhibits **PARITY** with B6/B2. Veyra's defensible advantage appears when tools lack probes: Veyra enforces safe abstention (`DEFER`/`DENY`), whereas naive systems replay blind.
-
 ---
 
 ## C. MCPMark Verified: Real Agent + Stdio MCP Server
@@ -66,7 +87,7 @@ Comparison on the UndoBench protocol across fault boundaries:
   - **Raw Agent:** 0/2 Pass. Agent listed directory, inspected sizes, but selected `bridge.jpg` instead of `sg.jpg` (largest file), failing benchmark assertions.
   - **Veyra-Wrapped Agent:** 0/2 Pass. Veyra intercepted and executed `rename_file` in $0.21\,\text{ms}$ with zero false blocks.
   - **Overhead:** Veyra added $0.21\,\text{ms}$ wall-clock latency ($< 0.1\%$ relative overhead).
-- **Critical Verdict:** Post-proposal middleware guarantees execution contract compliance and safety, but **cannot fix underlying model reasoning mistakes**.
+- **Critical Verdict:** Post-proposal middleware guarantees execution contract compliance and safety, but **cannot fix underlying model reasoning mistakes**. Veyra currently has **not** demonstrated that it improves raw agent task success on MCPMark.
 
 ---
 
@@ -85,24 +106,24 @@ Isolated integration tests verified in [`python/tests/test_v02_productization.py
 
 ## E. Pre-Inference Routing vs Post-Proposal Middleware (Composition)
 
+Status: **COMPOSITION FEASIBLE / PRELIMINARY** (Not yet validated as a live multi-arm benchmark result).
+
 | Layer | System | Primary Objective | Tokens / Turn | Execution Safety |
 | :--- | :--- | :--- | :---: | :---: |
-| **Pre-Inference** | AgentWeave / Top-K Router | Catalog candidate reduction | Reduced by ~60% | No fault recovery |
+| **Pre-Inference** | AgentWeave / Top-K Router | Catalog candidate reduction | Reduced by ~60% (Hypothesis) | No fault recovery |
 | **Post-Proposal** | Veyra Middleware | Contract validation & recovery | Unchanged | 0% DER, Safe Recovery |
-| **Composed (C+D)** | Top-K + Veyra | Efficiency + Reliability | **Reduced by ~60%** | **0% DER, Safe Recovery** |
-
-*Takeaway:* Veyra does not replace AgentWeave; the two systems operate at orthogonal layers (pre-inference prompt reduction vs post-proposal execution safety).
+| **Composed (C+D)** | Top-K + Veyra | Efficiency + Reliability | Preliminary Feasibility | 0% DER, Safe Recovery |
 
 ---
 
 ## F. Safety & Overhead Ledger
 
 - **False Block Rate:** $0.0\%$ (100% pass on nominal control runs across 240 scenarios).
-- **Wall-Clock Middleware Overhead:**
+- **Measured Middleware Overhead in Tested Environments:**
   - In-process Python callable: $18\text{--}35\,\mu\text{s}$.
   - Stdio MCP tool execution: $0.15\text{--}0.28\,\text{ms}$.
   - HTTP / Network tool execution: $< 0.5\,\text{ms}$ ($< 0.2\%$ relative overhead).
-- **Token Overhead:** $0$ extra prompt tokens consumed on recovered faults (recovers deterministically without LLM replan).
+- **Production Status:** Low measured overhead across tests. Operational readiness requires further production hardening, monitoring, and live deployment validation.
 
 ---
 
@@ -130,3 +151,4 @@ safe_tool = veyra.wrap(my_tool)
    - RL / LinUCB Bandits (lab exploration only).
    - LLM-as-a-Router (adds latency and non-determinism without safety benefit).
    - API Gateway / Proxy features (middleware remains strictly in-process).
+
