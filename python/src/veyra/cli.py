@@ -571,19 +571,38 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     sub = getattr(args, "inspect_subcommand", "policy")
     if sub == "tool":
         tool_name = getattr(args, "tool_name", "all")
-        print(json.dumps({"inspect": "tool", "target": tool_name, "status": "active"}))
+        print(json.dumps({"error": "NOT_IMPLEMENTED", "message": f"Tool inspection for '{tool_name}' requires an active server or manifest file. Use 'veyra analyze-tool <manifest>' or 'veyra conformance profile <tool>'."}))
+        return 1
     elif sub == "policy":
-        print(json.dumps({"inspect": "policy", "active": ["strict", "fail_closed", "tenant_isolation"]}))
+        from veyra.config import load_config
+        cfg = load_config()
+        print(json.dumps({"inspect": "policy", "active_policies": cfg.get("policy", {})}, indent=2))
+        return 0
     elif sub == "state":
-        print(json.dumps({"inspect": "state", "mode": "FAIL_CLOSED", "in_flight": 0}))
+        print(json.dumps({"error": "NOT_IMPLEMENTED", "message": "State inspection requires connection to live Veyra kernel runtime."}))
+        return 1
     return 0
 
 
 def cmd_policy(args: argparse.Namespace) -> int:
     sub = getattr(args, "policy_subcommand", "lint")
     filepath = getattr(args, "file", "veyra.yaml")
-    print(json.dumps({"file": filepath, "status": "LINT_PASSED", "errors": []}))
-    return 0
+    path = Path(filepath)
+    if not path.exists():
+        print(json.dumps({"file": filepath, "status": "FAILED", "errors": [f"File not found: {filepath}"]}))
+        return 1
+    try:
+        import yaml
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        errors = []
+        if not isinstance(data, dict):
+            errors.append("Root structure must be a YAML mapping")
+        print(json.dumps({"file": filepath, "status": "PASSED" if not errors else "FAILED", "errors": errors}))
+        return 0 if not errors else 1
+    except Exception as e:
+        print(json.dumps({"file": filepath, "status": "SYNTAX_ERROR", "errors": [str(e)]}))
+        return 1
 
 
 def cmd_proxy(args: argparse.Namespace) -> int:
@@ -596,20 +615,28 @@ def cmd_proxy(args: argparse.Namespace) -> int:
         proxy = VeyraMCPProxy(v)
         print("Veyra MCP proxy active (stdio/streamable mode).")
     elif sub == "http":
-        print("Veyra HTTP proxy endpoint initialized.")
+        print(json.dumps({"error": "NOT_IMPLEMENTED", "message": "HTTP proxy gateway mode is not active; use MCP stdio proxy."}))
+        return 1
     return 0
 
 
 def cmd_trace(args: argparse.Namespace) -> int:
     sub = getattr(args, "trace_subcommand", "list")
+    traces_dir = Path("out/traces")
+    if not traces_dir.exists():
+        print(json.dumps({"error": "NO_TRACES", "message": "No traces recorded in out/traces. Run an agent harness to generate traces."}))
+        return 0
+    traces = [p.name for p in traces_dir.glob("*.json")]
     if sub == "list":
-        print(json.dumps({"traces": [{"id": "tr_001", "timestamp": time.time(), "status": "COMPLETED"}]}))
+        print(json.dumps({"traces_directory": str(traces_dir), "traces": traces}))
     elif sub == "show":
-        tid = getattr(args, "trace_id", "tr_001")
-        print(json.dumps({"id": tid, "events": ["ACTION_PROPOSED", "ACTION_EXECUTED"]}))
-    return 0
-
-
+        tid = getattr(args, "trace_id", "")
+        target = traces_dir / f"{tid}.json"
+        if not target.exists():
+            print(json.dumps({"error": "NOT_FOUND", "message": f"Trace '{tid}' not found in {traces_dir}"}))
+            return 1
+        with open(target, "r", encoding="utf-8") as f:
+            print(f.read())
 def cmd_replay(args: argparse.Namespace) -> int:
     from veyra.boundary import Veyra
     from veyra.replay import TrajectoryReplayer
@@ -632,20 +659,50 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    tx_id = getattr(args, "transaction_id", "tx_001")
-    print(json.dumps({"transaction_id": tx_id, "status": "VERIFIED", "evidence": "idempotency_matched"}))
-    return 0
+    tx_id = getattr(args, "transaction_id", "")
+    print(json.dumps({
+        "error": "NOT_IMPLEMENTED",
+        "transaction_id": tx_id,
+        "message": "Independent verification requires an explicit tool execution contract with verification probe. Use 'veyra conformance run <tool>'."
+    }))
+    return 1
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
     sub = getattr(args, "bench_subcommand", "list")
     if sub == "list":
-        print(json.dumps({"benchmarks": ["undobench", "mcpmark", "toolmisusebench"]}))
+        print(json.dumps({
+            "available_suites": [
+                "recovery_controller",
+                "conformance",
+                "undobench (requires official external runner)",
+                "mcpmark (requires official external runner)"
+            ]
+        }, indent=2))
+        return 0
     elif sub == "run":
-        bench_name = getattr(args, "benchmark", "undobench")
-        print(json.dumps({"benchmark": bench_name, "status": "COMPLETED", "CRSR": 1.0, "DER": 0.0}))
+        bench_name = getattr(args, "benchmark", "")
+        if bench_name == "conformance":
+            print("Running Veyra Conformance Benchmark Suite...")
+            subprocess.run([sys.executable, "-m", "benchmarks.conformance.engine"], check=False)
+            return 0
+        elif bench_name == "recovery_controller":
+            print("Running Veyra Recovery Controller Benchmark Suite...")
+            subprocess.run([sys.executable, "benchmarks/recovery_controller/engine.py"], check=False)
+            return 0
+        else:
+            print(json.dumps({
+                "error": "EXTERNAL_BENCHMARK_REQUIRED",
+                "benchmark": bench_name,
+                "message": f"To run official {bench_name}, invoke its official external adapter. Synthetic placeholder scores have been removed."
+            }))
+            return 1
     elif sub == "compare":
-        print(json.dumps({"comparison": "completed", "delta_DER": 0.0}))
+        print(json.dumps({
+            "error": "NOT_IMPLEMENTED",
+            "message": "Use 'python benchmarks/recovery_controller/engine.py' to generate paired comparisons."
+        }))
+        return 1
     return 0
 
 
@@ -726,6 +783,45 @@ def cmd_analyze_tool(args: argparse.Namespace) -> int:
             for mg in report.missing_guarantees:
                 print(f"  - [!] {mg}")
         print("======================================\n")
+def cmd_conformance(args: argparse.Namespace) -> int:
+    from veyra.core.conformance import ConformanceTester
+    from veyra.core.contract_analyzer import ExecutionContractAnalyzer
+    subcmd = getattr(args, "conformance_subcommand", "run")
+    target_path = Path(args.target)
+    if not target_path.exists():
+        print(f"Error: Target manifest '{target_path}' not found.", file=sys.stderr)
+        return 1
+    manifest = ExecutionContractAnalyzer.load_from_yaml(target_path)
+
+    if subcmd in ("run", "profile"):
+        profile = ConformanceTester.test_tool(manifest, trials_per_fault=getattr(args, "trials", 50))
+        if getattr(args, "json", False):
+            print(profile.to_json())
+        else:
+            print(f"\n=======================================================")
+            print(f"       VEYRA EXECUTION CONFORMANCE REPORT              ")
+            print(f"=======================================================")
+            print(f"Tool:                        {profile.tool_name}")
+            print(f"Declared Idempotency:        {profile.declared_idempotency}")
+            print(f"Observed Idempotency:        {profile.verified_idempotency}")
+            print(f"Idempotency Status:          {profile.idempotency_status}")
+            print(f"Status Probe Status:         {profile.status_lookup_status}")
+            print(f"Observed Read Consistency:   {profile.read_consistency_observed}")
+            print(f"Late-Commit Resilience:      {profile.late_commit_resilience}")
+            print(f"False Assurance Detected:    {'YES [!]' if profile.false_assurance_detected else 'NO'}")
+            print(f"Autonomous Recommendation:   {profile.autonomous_recommendation}")
+            print(f"Total Fault Injections:      {profile.total_trials}")
+            print(f"\nDetailed Fault Injections:")
+            for res in profile.fault_results:
+                print(f"  - [{res.status}] {res.fault_type}: Dups={res.duplicate_effects}/{res.trials} (DER={res.observed_der*100:.1f}%, 95% UCB={res.der_95_ucb:.2f}%)")
+            print(f"=======================================================\n")
+        return 0
+    elif subcmd == "report":
+        print(json.dumps({"error": "NOT_IMPLEMENTED", "message": "Historical run report lookup requires a run ledger database."}))
+        return 1
+    elif subcmd == "diff":
+        print(json.dumps({"error": "NOT_IMPLEMENTED", "message": "Profile diffing requires two verified profiles."}))
+        return 1
     return 0
 
 
@@ -920,6 +1016,13 @@ def main(argv: list[str] | None = None) -> int:
     p_an.add_argument("manifest", help="path to contract YAML/JSON manifest")
     p_an.add_argument("--json", action="store_true", help="output structured JSON")
     p_an.set_defaults(func=cmd_analyze_tool)
+
+    p_conf = sub.add_parser("conformance", help="black-box fault-injection conformance testing for AI-callable tools")
+    p_conf.add_argument("conformance_subcommand", nargs="?", default="run", choices=["run", "profile", "report", "diff"])
+    p_conf.add_argument("target", help="path to tool manifest or contract YAML")
+    p_conf.add_argument("--trials", type=int, default=50, help="trials per injected fault mode")
+    p_conf.add_argument("--json", action="store_true", help="output machine-readable VerifiedExecutionProfile JSON")
+    p_conf.set_defaults(func=cmd_conformance)
 
     args = parser.parse_args(argv)
     return int(args.func(args) or 0)

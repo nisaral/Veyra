@@ -1,179 +1,108 @@
-# Veyra — Execution Control Middleware for Tool-Using AI Agents
+# Veyra — Verified Execution Semantics for AI-Callable Tools
 
-> **Your agent decides what it wants to do. Veyra makes sure the action is still safe and executable.**
+> **Don't trust tool declarations or LLM guesses. Test what tools actually do under failure before letting agents run autonomously.**
 >
-> Add reliability at the execution boundary without rewriting your agent.
+> Veyra actively tests tool execution semantics under controlled fault injection, discovers contract violations, and generates machine-readable **Verified Execution Profiles** that runtimes can enforce.
 
 ---
 
-## 1. Problem
+## 1. The Core Problem
 
-When AI agents invoke tools (databases, APIs, payment gateways, shell scripts), non-deterministic LLM planning often results in:
-- Executing unauthorized or dangerous parameters.
-- Re-executing non-idempotent mutations after network drops (`UNKNOWN_ACK`).
-- Calling stale or degraded endpoints.
-- Broken schema serialization and missing parameters.
+When AI agents invoke tools (APIs, databases, payment gateways, filesystem endpoints), tool metadata often advertises capabilities that fail under real network conditions:
+- An API claims to be **idempotent**, but lacks deduplication across retried requests.
+- A status probe reports **committed=False** due to read-replica lag, inducing catastrophic duplicate mutations on blind retry.
+- An MCP tool provides `readOnlyHint` or `idempotentHint`, which the protocol explicitly defines as unverified hints.
 
-Existing agent retry logic blindly replays requests, risking duplicate mutations (e.g. charging a customer twice).
+Blindly trusting developer declarations or LLM guesses results in duplicate payments, double database insertions, and unrecoverable real-world harm.
 
-## 2. Why Existing Agent Retry / Tool Routing Is Insufficient
+---
 
-Standard retry handlers and LLM routers operate **pre-inference** or rely on LLM re-prompting. They lack deterministic execution contract safety, state awareness, and idempotency guarantees.
+## 2. The Solution: Conformance Testing First, Runtime Enforcement Second
 
-Veyra sits **post-proposal, pre-execution** at the execution boundary:
+Veyra bridges the gap between **declared** and **verified** tool semantics:
+
 ```text
-Agent Proposes Action → Veyra Validates/Resolves → Tool Executes
+Tool Declaration (OpenAPI / MCP Hint / YAML)
+              │
+              ▼
+┌──────────────────────────────────────┐
+│      Veyra Conformance Engine        │
+│  Active Fault Injection & Testing    │
+│  (Lost ACK, Lag, Late Commit, Crash) │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│      Verified Execution Profile      │
+│  (Proven Idempotency, Probes, Bounds)│
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│      Veyra Execution Runtime         │
+│  Enforce Verified Boundaries         │
+└──────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 30-Second Install
+## 3. Installation & Development Setup
+
+*(Note: The PyPI package name `veyra` is currently occupied by an unrelated project. Install from source or local checkout):*
 
 ```bash
-pip install veyra
+git clone https://github.com/nisaral/Veyra.git
+cd Veyra
+pip install -e ./python
 ```
 
-Verify installation:
+Verify environment:
 ```bash
 veyra doctor
 ```
 
 ---
 
-## 4. 10-Line Integration
+## 4. Auditing a Tool: Conformance Profile
 
-```python
-from veyra import Veyra
-
-veyra = Veyra(policy="default", mode="fail_closed")
-
-@veyra.wrap
-def process_refund(customer_id: str, amount: float) -> dict:
-    return {"status": "refunded", "customer": customer_id, "amount": amount}
-
-# The agent proposes a tool call; Veyra enforces contract safety & idempotency
-result = process_refund(customer_id="cust_123", amount=50.0)
-print(result)
-```
-
----
-
-## 5. UNKNOWN_ACK Safe Handling
-
-```python
-from veyra import Veyra
-from veyra.core.action import ExecutableAction
-
-veyra = Veyra(mode="fail_closed")
-
-# Non-idempotent mutation during network drop receives UNKNOWN_ACK
-# Veyra requires verification before replay — preventing blind duplicates
-```
-
----
-
-## 6. MCP Proxy Demo
-
-Place Veyra between any MCP Client (Agent) and MCP Server without modifying your agent code:
+Audit any tool contract or MCP manifest against execution failure modes:
 
 ```bash
-veyra proxy mcp
+veyra analyze-tool examples/execution_contracts/payment_charge.yaml
 ```
 
-Architecture:
-```text
-Agent (MCP Client) → Veyra MCP Proxy → Veyra Policy/Resolution → Real MCP Server
-```
-
----
-
-## 7. Policy Example
-
-```yaml
-# veyra.yaml
-veyra:
-  mode: fail_closed
-
-policy:
-  tenant_isolation: true
-  authorization: true
-  freshness: true
-  health: true
-
-recovery:
-  unknown_ack: verify_then_defer
-  retries:
-    enabled: true
-    max_attempts: 2
-```
-
-Validate & explain configuration:
+Run active black-box conformance testing:
 ```bash
-veyra config validate
-veyra config explain
+veyra conformance run examples/execution_contracts/payment_charge.yaml
 ```
 
----
-
-## 8. Trace and Replay Example
-
-Replay an execution trajectory trace without executing side effects (DRY_RUN):
+Inspect verified execution profile:
 ```bash
-veyra replay run.json
-```
-
-Opt-in to live execution:
-```bash
-veyra replay run.json --execute
-```
-
-Diff two run trajectories:
-```bash
-veyra diff run1.json run2.json
+veyra conformance profile examples/execution_contracts/payment_charge.yaml
 ```
 
 ---
 
-## 9. Benchmark Results
+## 5. Provenance-Tracked Execution Contract
 
-Controlled evaluation results demonstrate Veyra's deterministic execution resolution:
-
-| Evaluation Suite | Control Baseline | Veyra Execution Control |
-|---|---|---|
-| **Contract Invariants** | Unsafe side effects | 100% Safety Enforcement |
-| **UNKNOWN_ACK Mutations** | Blind replay duplicates | Zero Blind Replay Duplicates |
-| **UndoBench DER** | 100% Failure Rate | 0% DER (Execution Safety) |
+Every capability tracked by Veyra carries explicit provenance:
+- `DECLARED`: Stated by developer or MCP ToolAnnotation hint.
+- `OBSERVED`: Seen in runtime execution traces.
+- `VERIFIED`: Actively proven by Veyra black-box fault-injection testing.
+- `CONTRADICTED`: Claimed by documentation but violated under fault injection.
 
 ---
 
-## 10. Architecture
+## 6. Research & Evaluation Status
 
-```text
-LangGraph / OpenAI Agents / AutoGen / Microsoft Agent Framework
-                         │
-                       AGENT
-                         │
-                         ▼
-                       VEYRA
-                         │
-                    execution
-                         │
-              MCP / Python / HTTP
-```
+- **Evaluation Protocol:** See [Partial Observability Protocol](docs/research/partial_observability_protocol.md) and [Fair Baseline Spec](docs/research/fair_baseline_spec.md).
+- **Historical Experiments:** Versioned synthetic evaluation reports are archived in [docs/research/archive/](docs/research/archive/).
+- **Current Runtime Status:** Production default is **Deterministic Contract Enforcement** backed by verified execution profiles. The Bayesian Belief-State controller is maintained as an **experimental research arm** for partial observability studies.
+
+*Disclaimer: Veyra does NOT claim mathematically zero risk or "100% safety enforcement." All empirical metrics report finite-sample confidence bounds (e.g., 0 observed duplicate effects in N trials; one-sided 95% UCB = X%).*
 
 ---
 
-## 11. Framework Integrations
+## 7. License
 
-Veyra provides first-party adapters for:
-- **OpenAI Agents SDK**: `from veyra.integrations.openai_agents import VeyraOpenAIAgentsAdapter`
-- **LangGraph**: `from veyra.integrations.langgraph import VeyraLangGraphNode`
-- **AutoGen**: `from veyra.integrations.autogen import VeyraAutoGenAdapter`
-- **Microsoft Agent Framework**: `from veyra.integrations.microsoft_agent_framework import VeyraMicrosoftAgentMiddleware`
-
----
-
-## 12. Roadmap & License
-
-- **v0.2.0**: Unified Python SDK, MCP Proxy, Framework Adapters, CLI, Trajectory Replay & Diffing, Plugin System.
-- **License**: Apache 2.0.
+Apache 2.0.

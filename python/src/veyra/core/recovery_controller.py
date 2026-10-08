@@ -187,8 +187,17 @@ class BeliefStateEstimator:
 
 
 
+# =========================================================================
+# EXPERIMENTAL / RESEARCH CONTROLLER (Not Production Default)
+# =========================================================================
 class ConstrainedBeliefStateRecoveryController:
-    """Constrained Belief-State Recovery Controller (Directive §1 - §5)."""
+    """Constrained Belief-State Recovery Controller (EXPERIMENTAL / RESEARCH).
+    
+    NOTE: Production default is Deterministic Contract Enforcement with VerifiedExecutionProfile.
+    This Bayesian controller is quarantined for research under partial observability.
+    It operates solely on observed evidence and historical execution records,
+    never receiving ground-truth or evaluator-supplied reliability parameters.
+    """
 
     def __init__(
         self,
@@ -217,7 +226,7 @@ class ConstrainedBeliefStateRecoveryController:
         compensation_fn: Callable[..., Any] | None = None,
         reconcile_fn: Callable[..., Any] | None = None,
         evidence_probes: list[Callable[..., Any]] | None = None,
-        probe_reliability: float = 1.0,
+        historical_probe_confidence: float | None = None,
     ) -> ControllerDecision:
         # Step 1: Form initial belief distribution
         prior = self.estimator.initial_belief(failure_type, status_code)
@@ -241,13 +250,14 @@ class ConstrainedBeliefStateRecoveryController:
                 # Read-only timeout-controlled probe execution
                 probe_res = active_probe(**failed_action.arguments)
                 evidence_acquired = True
-                rel = probe_reliability
-                if isinstance(probe_res, dict) and "reliability" in probe_res:
-                    rel = float(probe_res["reliability"])
+                # Use historical confidence if provided from past tests, or metadata from probe result, else neutral 0.90
+                rel = historical_probe_confidence if historical_probe_confidence is not None else 0.90
+                if isinstance(probe_res, dict) and "confidence" in probe_res:
+                    rel = float(probe_res["confidence"])
                 evidence_details = {
                     "probe_name": getattr(active_probe, "__name__", "evidence_probe"),
                     "result": probe_res,
-                    "reliability": rel,
+                    "confidence": rel,
                 }
                 current_belief = self.estimator.update_with_evidence(prior, probe_res, probe_reliability=rel)
             except Exception as probe_err:

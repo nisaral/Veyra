@@ -231,7 +231,6 @@ def run_belief_state_veyra(
         supports_idempotency_key=(scenario.idempotency_mode.value == "SUPPORTED"),
         reconcile_fn=scenario.reconciliation_fn if scenario.reconciliation_available else None,
         compensation_fn=scenario.compensation_fn if scenario.compensation_available else None,
-        probe_reliability=scenario.verification_reliability,
     )
     lat = (time.perf_counter() - t0) * 1000.0
     return decision.action_type.value, lat
@@ -242,14 +241,13 @@ def run_belief_state_veyra(
 # Baseline 7: Full-Mechanism Deterministic Heuristic Controller
 # =========================================================================
 def run_full_mechanism_deterministic(scenario: Scenario) -> tuple[str, float]:
-    """Deterministic heuristic baseline with access to the EXACT same mechanisms:
-    verification probes, idempotency keys, reconciliation, and compensation.
+    """Strong deterministic heuristic baseline with access to the EXACT same mechanisms:
+    idempotency keys, verification probes, reconciliation, and compensation.
     
-    Operates without epistemic belief states or risk modeling.
-    Priority rule:
+    STRONG NON-STRAWMAN ORDERING:
       1. If non-mutation -> RETRY
-      2. If verification probe available -> query probe: if True -> VERIFY, else -> RETRY
-      3. Else if idempotency key supported -> IDEMPOTENCY_REPLAY
+      2. If idempotency key supported -> IDEMPOTENCY_REPLAY (Zero-risk deduplication)
+      3. Else if verification probe available -> query probe: if True -> VERIFY, else -> DEFER (Safe abstention)
       4. Else if reconcile hook available -> RECONCILE
       5. Else if compensation hook available -> COMPENSATE
       6. Else -> DEFER
@@ -257,17 +255,17 @@ def run_full_mechanism_deterministic(scenario: Scenario) -> tuple[str, float]:
     t0 = time.perf_counter()
     if not scenario.is_mutation:
         action = "RETRY"
+    elif scenario.idempotency_mode.value == "SUPPORTED" and scenario.idempotency_key:
+        action = "IDEMPOTENCY_REPLAY"
     elif scenario.verification_available and scenario.verification_fn:
         try:
             res = scenario.verification_fn(**scenario.arguments)
             if res.get("committed", False):
                 action = "VERIFY"
             else:
-                action = "RETRY"
+                action = "DEFER"  # Strong deterministic engineer avoids blind retry
         except Exception:
             action = "DEFER"
-    elif scenario.idempotency_mode.value == "SUPPORTED" and scenario.idempotency_key:
-        action = "IDEMPOTENCY_REPLAY"
     elif scenario.reconciliation_available and scenario.reconciliation_fn:
         action = "RECONCILE"
     elif scenario.compensation_available and scenario.compensation_fn:
