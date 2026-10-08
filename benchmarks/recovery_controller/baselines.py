@@ -64,7 +64,7 @@ def evaluate_action_outcome(
             return True, False, False
 
     elif true_state == TrueExecutionState.NOT_COMMITTED:
-        if selected_action in ("RETRY", "SAFE_RETRY", "IDEMPOTENCY_REPLAY"):
+        if selected_action in ("RETRY", "SAFE_RETRY", "BLIND_RETRY", "IDEMPOTENCY_REPLAY"):
             # Mutation never occurred -> Replay completes the action safely
             return True, False, False
         if selected_action == "VERIFY":
@@ -191,9 +191,11 @@ def run_belief_state_veyra(
         supports_idempotency_key=(scenario.idempotency_mode.value == "SUPPORTED"),
         reconcile_fn=scenario.reconciliation_fn if scenario.reconciliation_available else None,
         compensation_fn=scenario.compensation_fn if scenario.compensation_available else None,
+        probe_reliability=scenario.verification_reliability,
     )
     lat = (time.perf_counter() - t0) * 1000.0
     return decision.action_type.value, lat
+
 
 
 # =========================================================================

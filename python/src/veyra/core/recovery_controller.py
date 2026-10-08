@@ -135,6 +135,7 @@ class BeliefStateEstimator:
         self,
         prior: BeliefDistribution,
         probe_result: dict[str, Any] | bool | None,
+        probe_reliability: float = 1.0,
     ) -> BeliefDistribution:
         if probe_result is None:
             return prior
@@ -150,12 +151,40 @@ class BeliefStateEstimator:
             committed = bool(probe_result)
             count = 1 if committed else 0
 
+        # Incorporate probe reliability P(probe_correct) via Bayesian update
+        p_rel = max(0.5, min(1.0, probe_reliability))
+        p_err = 1.0 - p_rel
+
         if count > 1:
-            return BeliefDistribution(p_duplicated=0.99, p_committed=0.01)
+            p_dup = prior.p_duplicated * p_rel + (1.0 - prior.p_duplicated) * p_err
+            return BeliefDistribution(p_duplicated=p_dup, p_committed=1.0 - p_dup)
+
+        # Baseline uninformative allocation for unknown mass
+        unallocated_c = 0.5 * prior.p_unknown
+        unallocated_nc = 0.5 * prior.p_unknown
+
         if committed:
-            return BeliefDistribution(p_committed=0.99, p_in_flight=0.01)
+            # Probe indicates committed: P(committed | probe=committed)
+            prior_c = prior.p_committed + prior.p_in_flight + unallocated_c
+            numerator = prior_c * p_rel
+            denominator = numerator + (1.0 - prior_c) * p_err
+            p_post = numerator / max(denominator, 1e-9)
+            return BeliefDistribution(
+                p_committed=p_post,
+                p_in_flight=0.0,
+                p_not_committed=1.0 - p_post,
+            )
         else:
-            return BeliefDistribution(p_not_committed=0.95, p_unknown=0.05)
+            # Probe indicates NOT committed: P(not_committed | probe=not_committed)
+            prior_nc = prior.p_not_committed + unallocated_nc
+            numerator = prior_nc * p_rel
+            denominator = numerator + (1.0 - prior_nc) * p_err
+            p_post = numerator / max(denominator, 1e-9)
+            return BeliefDistribution(
+                p_not_committed=p_post,
+                p_committed=1.0 - p_post,
+            )
+
 
 
 class ConstrainedBeliefStateRecoveryController:
@@ -188,6 +217,7 @@ class ConstrainedBeliefStateRecoveryController:
         compensation_fn: Callable[..., Any] | None = None,
         reconcile_fn: Callable[..., Any] | None = None,
         evidence_probes: list[Callable[..., Any]] | None = None,
+        probe_reliability: float = 1.0,
     ) -> ControllerDecision:
         # Step 1: Form initial belief distribution
         prior = self.estimator.initial_belief(failure_type, status_code)
@@ -211,13 +241,18 @@ class ConstrainedBeliefStateRecoveryController:
                 # Read-only timeout-controlled probe execution
                 probe_res = active_probe(**failed_action.arguments)
                 evidence_acquired = True
+                rel = probe_reliability
+                if isinstance(probe_res, dict) and "reliability" in probe_res:
+                    rel = float(probe_res["reliability"])
                 evidence_details = {
                     "probe_name": getattr(active_probe, "__name__", "evidence_probe"),
                     "result": probe_res,
+                    "reliability": rel,
                 }
-                current_belief = self.estimator.update_with_evidence(prior, probe_res)
+                current_belief = self.estimator.update_with_evidence(prior, probe_res, probe_reliability=rel)
             except Exception as probe_err:
                 evidence_details = {"probe_error": str(probe_err)}
+
 
         # Step 3: Candidate Generation & Safety Constraint Evaluation (Directive §3 & §5)
         candidates: list[RecoveryCandidate] = []

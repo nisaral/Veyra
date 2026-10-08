@@ -1,58 +1,65 @@
 {
   "Raw Agent": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "14.00%",
-    "ci_95": "[14.00%, 14.00%]",
+    "mean_safe_recovery_rate": "64.03%",
+    "cluster_bootstrap_95_ci": "[54.55%, 74.19%]",
     "mean_duplicate_effect_rate": "36.00%",
-    "mean_unnecessary_abstention_rate": "0.00%"
+    "delta_vs_belief_veyra": "+21.99% [95% CI: +10.00%, +33.33%]"
   },
   "Naive Retry": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "14.00%",
-    "ci_95": "[14.00%, 14.00%]",
+    "mean_safe_recovery_rate": "64.03%",
+    "cluster_bootstrap_95_ci": "[54.55%, 74.19%]",
     "mean_duplicate_effect_rate": "36.00%",
-    "mean_unnecessary_abstention_rate": "0.00%"
+    "delta_vs_belief_veyra": "+21.99% [95% CI: +10.00%, +33.33%]"
   },
   "Verify-Before-Retry": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "80.00%",
-    "ci_95": "[80.00%, 80.00%]",
+    "mean_safe_recovery_rate": "91.98%",
+    "cluster_bootstrap_95_ci": "[86.67%, 96.97%]",
     "mean_duplicate_effect_rate": "4.00%",
-    "mean_unnecessary_abstention_rate": "0.00%"
+    "delta_vs_belief_veyra": "-5.96% [95% CI: -10.00%, +0.00%]"
   },
   "Idempotency Keys": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "42.00%",
-    "ci_95": "[42.00%, 42.00%]",
+    "mean_safe_recovery_rate": "70.06%",
+    "cluster_bootstrap_95_ci": "[60.61%, 78.79%]",
     "mean_duplicate_effect_rate": "30.00%",
-    "mean_unnecessary_abstention_rate": "0.00%"
+    "delta_vs_belief_veyra": "+15.95% [95% CI: +6.06%, +26.47%]"
   },
   "Current Veyra": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "42.00%",
-    "ci_95": "[42.00%, 42.00%]",
+    "mean_safe_recovery_rate": "42.11%",
+    "cluster_bootstrap_95_ci": "[31.25%, 53.12%]",
     "mean_duplicate_effect_rate": "0.00%",
-    "mean_unnecessary_abstention_rate": "44.00%"
+    "delta_vs_belief_veyra": "+43.90% [95% CI: +33.33%, +54.84%]"
   },
   "Belief-State Veyra": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "64.00%",
-    "ci_95": "[64.00%, 64.00%]",
+    "mean_safe_recovery_rate": "86.02%",
+    "cluster_bootstrap_95_ci": "[78.79%, 93.75%]",
     "mean_duplicate_effect_rate": "0.00%",
-    "mean_unnecessary_abstention_rate": "22.00%"
+    "delta_vs_belief_veyra": "+0.00% [95% CI: +0.00%, +0.00%]"
   },
   "Oracle": {
-    "n_total_scenarios": 500,
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
     "seeds": 10,
-    "mean_safe_recovery_rate": "90.00%",
-    "ci_95": "[90.00%, 90.00%]",
+    "mean_safe_recovery_rate": "90.08%",
+    "cluster_bootstrap_95_ci": "[83.87%, 96.88%]",
     "mean_duplicate_effect_rate": "0.00%",
-    "mean_unnecessary_abstention_rate": "0.00%"
+    "delta_vs_belief_veyra": "-4.06% [95% CI: -6.90%, +0.00%]"
   }
 }
