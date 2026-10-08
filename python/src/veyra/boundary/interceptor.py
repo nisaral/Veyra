@@ -42,6 +42,7 @@ class Veyra:
         retry_policy: SafeRetryPolicy | None = None,
         route_policy: RoutePolicy | None = None,
         registry: ToolRegistry | None = None,
+        recovery_policy: str | Any | None = None,
     ):
         self.mode = mode
         self.registry = registry or ToolRegistry()
@@ -54,7 +55,20 @@ class Veyra:
             self.route_policy = DeterministicRoutePolicy()
 
         self.resolver = DeterministicCandidateResolver(self.registry)
-        self.recovery_policy = SafeRecoveryPolicy(self.retry_policy)
+        
+        # Directive §18: Default remains deterministic; belief_state_experimental is opt-in
+        self.recovery_policy_mode = recovery_policy or "deterministic"
+        if isinstance(recovery_policy, str) and recovery_policy == "belief_state_experimental":
+            from veyra.core.recovery_controller import ConstrainedBeliefStateRecoveryController
+            self.belief_recovery_controller = ConstrainedBeliefStateRecoveryController()
+        else:
+            self.belief_recovery_controller = None
+
+        if hasattr(recovery_policy, "recover"):
+            self.recovery_policy = recovery_policy
+        else:
+            self.recovery_policy = SafeRecoveryPolicy(self.retry_policy)
+
 
         # Support both TraceRecorder and TraceSink
         if isinstance(recorder, TraceRecorder):

@@ -35,7 +35,14 @@ from veyra.core import (
     TraceSink,
     TrajectoryRecord,
 )
+from veyra.core.recovery_controller import (
+    ConstrainedBeliefStateRecoveryController,
+    HiddenExecutionState,
+    BeliefDistribution,
+    ControllerDecision,
+)
 from veyra.execution import ExecutionEngine
+
 from veyra.export import StructuredTraceExporter
 from veyra.plugins import PolicyPluginRegistry, default_plugins
 from veyra.policy import (
