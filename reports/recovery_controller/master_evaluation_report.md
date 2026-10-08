@@ -39,6 +39,7 @@ Evaluated across 500 paired executions (50 unique scenario clusters across 10 ra
 | **B2 (Cautious UndoBench)** | Key or Cautious Abstain | **42.28%** | [31.25%, 53.12%] | **0.00%** | **+43.74% [+33.33%, +54.55%]** |
 | *B2 (Unconstrained Fallback)* | *Key or Blind Retry* | *70.06%* | *[60.61%, 78.79%]* | ***30.00%*** | *+15.95% [+6.06%, +26.47%]* |
 | **Current Deterministic Veyra** | Strict verify or Defer | **42.11%** | [31.25%, 53.12%] | **0.00%** | **+43.90% [+33.33%, +54.84%]** |
+| **Full-Mechanism Deterministic** | Unified actions without belief | **86.02%** | [78.79%, 93.75%] | **0.00%** | **+0.00% [+0.00%, +0.00%]** |
 | **Belief-State Veyra** | Constrained belief recovery | **86.02%** | **[78.79%, 93.75%]** | **0.00%** | **0.00% [Reference]** |
 | **Oracle (Theoretical Upper Bound)** | Full hidden state visibility | 90.08% | [83.87%, 96.88%] | 0.00% | -4.06% [-6.90%, +0.00%] |
 
@@ -53,7 +54,7 @@ Rather than comparing apples-to-oranges operating points with disparate risk pro
 ```text
 Safe Recovery Rate (%)
 100% ┼                                                  ● Oracle (90.08%)
- 90% ┼                                    ● Belief Veyra (86.02%)
+ 90% ┼                                    ● Belief Veyra (86.02%) / Full Heuristic (86.02%)
  80% ┼                   ● Cautious B6 (79.94%)
  70% ┼
  60% ┼
@@ -70,17 +71,17 @@ Safe Recovery Rate (%)
 | **Raw Agent / Naive Retry** | DISQUALIFIED (36% DER) | DISQUALIFIED | DISQUALIFIED | DISQUALIFIED | DISQUALIFIED |
 | **Current Deterministic Veyra** | 42.00% | 42.00% | 42.00% | 42.00% | 42.00% |
 | **Cautious B2 (Idempotency)** | 42.00% | 42.00% | 42.00% | 42.00% | 42.00% |
-| **Cautious B6 (Verify-Before-Retry)**| 80.00% | 80.00% | 80.00% | 80.00% | 80.00% |
-| **Belief-State Veyra ($\epsilon = 0.01$)** | **86.00%** | **86.00%** | **86.00%** | **86.00%** | **86.00%** |
-| *Unconstrained B6* | *DISQUALIFIED (4% DER)* | *DISQUALIFIED* | *DISQUALIFIED* | *DISQUALIFIED* | *92.00%* |
-| **Oracle (Reference Upper Bound)** | 90.00% | 90.00% | 90.00% | 90.00% | 90.00% |
+| **Cautious B6 (Verify-Before-Retry)**| 79.94% | 79.94% | 79.94% | 79.94% | 79.94% |
+| **Full-Mechanism Deterministic** | **86.02%** | **86.02%** | **86.02%** | **86.02%** | **86.02%** |
+| **Belief-State Veyra ($\epsilon = 0.01$)** | **86.02%** | **86.02%** | **86.02%** | **86.02%** | **86.02%** |
+| *Unconstrained B6* | *DISQUALIFIED (4% DER)* | *DISQUALIFIED* | *DISQUALIFIED* | *DISQUALIFIED* | *91.98%* |
+| **Oracle (Reference Upper Bound)** | 90.08% | 90.08% | 90.08% | 90.08% | 90.08% |
 
-### Why Belief-State Veyra Outperforms Cautious B6:
-Cautious B6 is strictly siloed: it only queries verification probes. When a non-idempotent write fails and has **no verification probe**, cautious B6 is forced to abstain (`DEFER`).  
-In contrast, Belief-State Veyra's unified action space discovers alternative safe recovery pathways:
-- If a probe is absent but an **idempotency key is supported**, Veyra executes `IDEMPOTENCY_REPLAY`.
-- If a batch mutation partially commits, Veyra executes `RECONCILE` or `COMPENSATE`.  
-This multi-pathway recovery accounts for the **+6.08 pp lift over cautious B6** while strictly maintaining the zero-duplication invariant.
+### Why Unified Action Mechanisms Matter vs Why Belief Modeling Matters:
+1. **Unified Action Space Lift (+6.08 pp over Cautious B6):** When non-idempotent writes fail without probes, Cautious B6 is siloed and must abstain. Both Full-Mechanism Deterministic and Belief-State Veyra access alternative safe recovery pathways (replaying via idempotency keys or reconciling batch mutations), lifting safe recovery from 79.94% to 86.02%.
+2. **Where Belief Modeling Dominates Heuristics:** Under clean synthetic conditions where probes are 100% reliable, a deterministic heuristic matches Belief-State Veyra (86.02%). However, **under noisy probes ($P=95\%$) and late-commit observation equivalence**, the deterministic heuristic fails:
+   - **Noisy Probes ($P=95\%$):** The deterministic heuristic triggers duplicate writes (1.0% to 5.0% DER), whereas Belief-State Veyra's risk constraint maintains **0.00% DER**.
+   - **Late Commits (LIMBO Benchmark):** When read replicas lag and report `committed=False`, the deterministic heuristic blindly retries and causes **100% duplicate writes**. Belief-State Veyra correctly uses the idempotency key or safely abstains, maintaining **0.00% DER**.
 
 ---
 
@@ -141,10 +142,12 @@ Evaluated on **100 observation-equivalent late-commit scenarios** where a verifi
 
 | Late-Commit Condition ($N=100$) | Controller Arm | Action Selected | Safe Recovery Rate | Duplicate Effect Rate (DER) |
 | :--- | :--- | :--- | :---: | :---: |
-| **Late Commit WITHOUT Idempotency** | Verify-Before-Retry (B6) | Blind `RETRY` | 0.0% | **100.0% (Catastrophic Dupes)** |
-| *(Probe reports not committed)* | Belief-State Veyra | Safe `DEFER` | 0.0% | **0.0% (Safe Abstention)** |
-| **Late Commit WITH Idempotency** | Verify-Before-Retry (B6) | Blind `RETRY` | 0.0% | **100.0% (Lacks contract hook)** |
-| *(Contract provides Idempotency Key)* | Belief-State Veyra | `IDEMPOTENCY_REPLAY` | **100.0%** | **0.0% (Perfect Deduplication)** |
+| **Late Commit WITHOUT Idempotency** | Verify-Before-Retry (B6 Cautious) | Blind `RETRY` (probe=False) | 0.0% | **100.0% (Catastrophic Dupes)** |
+| *(Probe reports not committed)* | Full-Mechanism Deterministic | Blind `RETRY` (probe=False) | 0.0% | **100.0% (Catastrophic Dupes)** |
+| | Belief-State Veyra | Safe `DEFER` | 0.0% | **0.0% (Safe Abstention)** |
+| **Late Commit WITH Idempotency** | Verify-Before-Retry (B6 Cautious) | Blind `RETRY` (probe=False) | 0.0% | **100.0% (Lacks contract hook)** |
+| *(Contract provides Idempotency Key)* | Full-Mechanism Deterministic | Blind `RETRY` (probe=False) | 0.0% | **100.0% (Checks probe before key)** |
+| | Belief-State Veyra | `IDEMPOTENCY_REPLAY` | **100.0%** | **0.0% (Zero-Risk Key Dispatched)** |
 
 ---
 

@@ -27,6 +27,7 @@ from benchmarks.recovery_controller.baselines import (
     evaluate_action_outcome,
     run_belief_state_veyra,
     run_current_veyra,
+    run_full_mechanism_deterministic,
     run_idempotency_keys,
     run_idempotency_keys_unconstrained,
     run_naive_retry,
@@ -111,7 +112,8 @@ def run_benchmark_100() -> dict[str, Any]:
         "Verify-Before-Retry (B6 Unconstrained)": run_verify_before_retry_unconstrained,
         "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
         "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
-        "Current Veyra": run_current_veyra,
+        "Current Veyra (Deterministic)": run_current_veyra,
+        "Full-Mechanism Deterministic": run_full_mechanism_deterministic,
         "Belief-State Veyra": run_belief_state_veyra,
         "Oracle": run_oracle,
     }
@@ -144,7 +146,8 @@ def run_benchmark_500() -> dict[str, Any]:
         "Verify-Before-Retry (B6 Unconstrained)": run_verify_before_retry_unconstrained,
         "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
         "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
-        "Current Veyra": run_current_veyra,
+        "Current Veyra (Deterministic)": run_current_veyra,
+        "Full-Mechanism Deterministic": run_full_mechanism_deterministic,
         "Belief-State Veyra": run_belief_state_veyra,
         "Oracle": run_oracle,
     }
@@ -535,7 +538,8 @@ def run_limbo_late_commit_test() -> dict[str, Any]:
 
     # Evaluators
     systems = {
-        "Verify-Before-Retry (B6)": run_verify_before_retry,
+        "Verify-Before-Retry (B6 Cautious)": run_verify_before_retry,
+        "Full-Mechanism Deterministic": run_full_mechanism_deterministic,
         "Belief-State Veyra": run_belief_state_veyra,
     }
 
@@ -580,6 +584,7 @@ def run_equal_risk_benchmark() -> dict[str, Any]:
         "Idempotency Keys (B2 Cautious)": run_idempotency_keys,
         "Idempotency Keys (B2 Unconstrained)": run_idempotency_keys_unconstrained,
         "Current Veyra (Deterministic)": run_current_veyra,
+        "Full-Mechanism Deterministic": run_full_mechanism_deterministic,
         "Belief-State Veyra (eps=0.01)": run_belief_state_veyra,
         "Oracle": run_oracle,
     }

@@ -53,7 +53,7 @@
     "mean_duplicate_effect_rate": "30.00%",
     "delta_vs_belief_veyra": "+15.95% [95% CI: +6.06%, +26.47%]"
   },
-  "Current Veyra": {
+  "Current Veyra (Deterministic)": {
     "n_total_executions": 500,
     "n_scenario_clusters": 50,
     "seeds": 10,
@@ -61,6 +61,15 @@
     "cluster_bootstrap_95_ci": "[31.25%, 53.12%]",
     "mean_duplicate_effect_rate": "0.00%",
     "delta_vs_belief_veyra": "+43.90% [95% CI: +33.33%, +54.84%]"
+  },
+  "Full-Mechanism Deterministic": {
+    "n_total_executions": 500,
+    "n_scenario_clusters": 50,
+    "seeds": 10,
+    "mean_safe_recovery_rate": "86.02%",
+    "cluster_bootstrap_95_ci": "[78.79%, 93.75%]",
+    "mean_duplicate_effect_rate": "0.00%",
+    "delta_vs_belief_veyra": "+0.00% [95% CI: +0.00%, +0.00%]"
   },
   "Belief-State Veyra": {
     "n_total_executions": 500,

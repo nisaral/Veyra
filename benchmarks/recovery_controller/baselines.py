@@ -239,7 +239,44 @@ def run_belief_state_veyra(
 
 
 # =========================================================================
-# Baseline 7: Oracle (Optimal Safe Action with Perfect Information)
+# Baseline 7: Full-Mechanism Deterministic Heuristic Controller
+# =========================================================================
+def run_full_mechanism_deterministic(scenario: Scenario) -> tuple[str, float]:
+    """Deterministic heuristic baseline with access to the EXACT same mechanisms:
+    verification probes, idempotency keys, reconciliation, and compensation.
+    
+    Operates without epistemic belief states or risk modeling.
+    Priority rule:
+      1. If non-mutation -> RETRY
+      2. If verification probe available -> query probe: if True -> VERIFY, else -> RETRY
+      3. Else if idempotency key supported -> IDEMPOTENCY_REPLAY
+      4. Else if reconcile hook available -> RECONCILE
+      5. Else if compensation hook available -> COMPENSATE
+      6. Else -> DEFER
+    """
+    t0 = time.perf_counter()
+    if not scenario.is_mutation:
+        action = "RETRY"
+    elif scenario.verification_available and scenario.verification_fn:
+        res = scenario.verification_fn(**scenario.arguments)
+        if res.get("committed", False):
+            action = "VERIFY"
+        else:
+            action = "RETRY"
+    elif scenario.idempotency_mode.value == "SUPPORTED" and scenario.idempotency_key:
+        action = "IDEMPOTENCY_REPLAY"
+    elif scenario.reconciliation_available and scenario.reconciliation_fn:
+        action = "RECONCILE"
+    elif scenario.compensation_available and scenario.compensation_fn:
+        action = "COMPENSATE"
+    else:
+        action = "DEFER"
+    lat = (time.perf_counter() - t0) * 1000.0
+    return action, lat
+
+
+# =========================================================================
+# Baseline 8: Oracle (Optimal Safe Action with Perfect Information)
 # =========================================================================
 def run_oracle(scenario: Scenario) -> tuple[str, float]:
     t0 = time.perf_counter()

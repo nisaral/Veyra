@@ -35,6 +35,11 @@
       "safe_recovery_rate": "42.00%",
       "qualifies": true
     },
+    "Full-Mechanism Deterministic": {
+      "empirical_DER": "0.00%",
+      "safe_recovery_rate": "86.00%",
+      "qualifies": true
+    },
     "Belief-State Veyra (eps=0.01)": {
       "empirical_DER": "0.00%",
       "safe_recovery_rate": "86.00%",
@@ -80,6 +85,11 @@
     "Current Veyra (Deterministic)": {
       "empirical_DER": "0.00%",
       "safe_recovery_rate": "42.00%",
+      "qualifies": true
+    },
+    "Full-Mechanism Deterministic": {
+      "empirical_DER": "0.00%",
+      "safe_recovery_rate": "86.00%",
       "qualifies": true
     },
     "Belief-State Veyra (eps=0.01)": {
@@ -129,6 +139,11 @@
       "safe_recovery_rate": "42.00%",
       "qualifies": true
     },
+    "Full-Mechanism Deterministic": {
+      "empirical_DER": "0.00%",
+      "safe_recovery_rate": "86.00%",
+      "qualifies": true
+    },
     "Belief-State Veyra (eps=0.01)": {
       "empirical_DER": "0.00%",
       "safe_recovery_rate": "86.00%",
@@ -176,6 +191,11 @@
       "safe_recovery_rate": "42.00%",
       "qualifies": true
     },
+    "Full-Mechanism Deterministic": {
+      "empirical_DER": "0.00%",
+      "safe_recovery_rate": "86.00%",
+      "qualifies": true
+    },
     "Belief-State Veyra (eps=0.01)": {
       "empirical_DER": "0.00%",
       "safe_recovery_rate": "86.00%",
@@ -221,6 +241,11 @@
     "Current Veyra (Deterministic)": {
       "empirical_DER": "0.00%",
       "safe_recovery_rate": "42.00%",
+      "qualifies": true
+    },
+    "Full-Mechanism Deterministic": {
+      "empirical_DER": "0.00%",
+      "safe_recovery_rate": "86.00%",
       "qualifies": true
     },
     "Belief-State Veyra (eps=0.01)": {
