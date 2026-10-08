@@ -232,11 +232,38 @@ def make_llm(opts: dict[str, Any]) -> LLMClient:
             strong=opts.get("model_strong", "qwen2.5-coder:7b"),
             base_url=opts.get("base_url", "http://127.0.0.1:11434"),
         )
-    if mode == "openai":
+    if mode in ("openai", "odyssey"):
         return OpenAICompatibleLLM(
-            cheap=opts.get("model_cheap", "gpt-4o-mini"),
-            strong=opts.get("model_strong", "gpt-4o"),
-            base_url=opts.get("base_url", "https://api.openai.com/v1"),
-            api_key=opts.get("api_key", "not-needed"),
+            cheap=opts.get("model_cheap", "openai/gpt-4o"),
+            strong=opts.get("model_strong", "openai/gpt-4o"),
+            base_url=opts.get("base_url") or default_llm_base_url(),
+            api_key=opts.get("api_key") or default_llm_api_key(),
         )
-    raise ValueError(f"unknown model_mode {mode!r} (expected offline|ollama|openai)")
+    raise ValueError(f"unknown model_mode {mode!r} (expected offline|ollama|openai|odyssey)")
+
+
+def default_llm_base_url() -> str:
+    import os
+
+    if os.environ.get("ODYSSEY_API_KEY"):
+        return (os.environ.get("ODYSSEY_BASE_URL") or "https://odysseyapi.tech/v1").rstrip("/")
+    return "http://127.0.0.1:1234/v1"
+
+
+def default_llm_api_key() -> str:
+    import os
+
+    return os.environ.get("ODYSSEY_API_KEY") or os.environ.get("OPENAI_API_KEY") or "lm-studio"
+
+
+def make_odyssey_openai_client():
+    """OpenAI SDK client for Odyssey, with LM Studio fallback. Keys from os.environ only."""
+    import os
+
+    from openai import OpenAI
+
+    key = os.environ.get("ODYSSEY_API_KEY")
+    if key:
+        base = (os.environ.get("ODYSSEY_BASE_URL") or "https://odysseyapi.tech/v1").rstrip("/")
+        return OpenAI(base_url=base, api_key=key)
+    return OpenAI(base_url="http://127.0.0.1:1234/v1", api_key="lm-studio")

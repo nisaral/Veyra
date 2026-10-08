@@ -649,6 +649,32 @@ def cmd_bench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Check Python, Odyssey/LM Studio env, and optional kernel port. Never prints secrets."""
+    import os
+
+    from veyra import __version__
+    from veyra.llm import default_llm_base_url
+
+    print(f"veyra {__version__}")
+    print(f"python {sys.version.split()[0]}")
+    has_odyssey = bool(os.environ.get("ODYSSEY_API_KEY"))
+    print(f"ODYSSEY_API_KEY: {'set' if has_odyssey else 'unset'}")
+    print(f"llm base_url: {default_llm_base_url()}")
+    if has_odyssey:
+        print("llm provider: odyssey")
+    else:
+        print("llm provider: lm-studio fallback (http://127.0.0.1:1234/v1)")
+    kernel = getattr(args, "addr", DEFAULT_KERNEL)
+    host, _, port = kernel.rpartition(":")
+    try:
+        with socket.create_connection((host or "127.0.0.1", int(port or "7788")), timeout=0.5):
+            print(f"kernel {kernel}: reachable")
+    except OSError:
+        print(f"kernel {kernel}: not listening (optional)")
+    return 0
+
+
 def cmd_plugin(args: argparse.Namespace) -> int:
     from veyra.plugins import default_plugins
     sub = getattr(args, "plugin_subcommand", "list")

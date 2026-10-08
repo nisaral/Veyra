@@ -48,14 +48,14 @@ export default function LandingPage() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 shadow-md transition-all"
                 >
                   <Sparkles className="w-4 h-4 text-emerald-400" />
-                  Explore Live Trace
+                  Demo console
                 </Link>
                 <Link
                   href="/benchmarks"
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-slate-800 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm transition-all"
                 >
                   <BarChart3 className="w-4 h-4 text-slate-500" />
-                  ToolMisuseBench Results (+25pp)
+                  Evaluation notes
                 </Link>
                 <Link
                   href="/docs"

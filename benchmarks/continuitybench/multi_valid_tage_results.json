@@ -12,7 +12,7 @@
       "mrr": 0.675,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 0.17
+      "mean_latency_us": 0.1
     },
     "reliability_aware": {
       "valid_ipr": "100.0%",
@@ -20,7 +20,7 @@
       "mrr": 0.675,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 1.73
+      "mean_latency_us": 1.02
     },
     "case_memory": {
       "valid_ipr": "100.0%",
@@ -28,7 +28,7 @@
       "mrr": 1.0,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 0.79
+      "mean_latency_us": 0.56
     },
     "linucb_bandit": {
       "valid_ipr": "100.0%",
@@ -36,7 +36,7 @@
       "mrr": 1.0,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 32.83
+      "mean_latency_us": 22.96
     },
     "tage_history": {
       "valid_ipr": "100.0%",
@@ -44,7 +44,7 @@
       "mrr": 0.75,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 4.39
+      "mean_latency_us": 3.27
     },
     "full_veyra": {
       "valid_ipr": "100.0%",
@@ -52,7 +52,7 @@
       "mrr": 0.75,
       "wrong_tool_rate": "0.0%",
       "unsafe_exploration": 0,
-      "mean_latency_us": 0.14
+      "mean_latency_us": 0.09
     }
   }
 }

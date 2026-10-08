@@ -17,7 +17,7 @@ export default function BenchmarksPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700">
               <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
               <span>Evaluation & Empirical Results</span>
-              <span className="badge-measured">MEASURED BASELINE</span>
+              <span className="badge-demo">LOCAL / IN-REPO</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">
@@ -25,7 +25,7 @@ export default function BenchmarksPage() {
             </h1>
 
             <p className="text-sm text-slate-600 leading-relaxed">
-              Empirical evidence evaluating Veyra&apos;s tool-boundary reliability across controlled synthetic faults (Tier 0) and replayable fault injection (ToolMisuseBench Tier 1).
+              Local and in-repo suites (ContinuityBench, UndoBench adapter, ToolMisuseBench). Harbor, MCPMark, and τ² are not claimed until official runners produce trajectories.
             </p>
 
             <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200/80 text-xs text-emerald-900 flex items-start gap-3 shadow-sm">

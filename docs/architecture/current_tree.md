@@ -74,8 +74,8 @@ python/src/veyra/
 
 | Directory | Classification | Status & Purpose |
 | :--- | :---: | :--- |
-| `python/src/veyra/` | **ACTIVE** | Canonical v0.2.0 Python production SDK, middleware, CLI, and integrations. |
-| `python/tests/` | **ACTIVE** | Core unit, integration, property, and boundary safety test suite (`249+ passed`). |
+| `python/src/veyra/` | **ACTIVE** | Canonical v0.2.0 Python production SDK, in-process middleware, CLI, and integrations. |
+| `python/tests/` | **ACTIVE** | Core unit, integration, property, and boundary safety test suite (`261 passed`). |
 | `benchmarks/adapters/` | **ACTIVE** | Official public benchmark adapters (UndoBench, ToolMisuseBench). |
 | `benchmarks/resolution/` | **ACTIVE** | Veyra internal 240-scenario resolution evaluation harness. |
 | `benchmarks/results/` | **ACTIVE** | Audited raw trajectory JSON artifacts. |
@@ -88,7 +88,8 @@ python/src/veyra/
 
 ## 3. Public Surface Consolidation Guarantee
 
-A developer installing `veyra` via `pip install veyra` interacts exclusively with:
-1. `from veyra import Veyra` (Canonical Python SDK)
-2. `veyra proxy mcp` / `veyra wrap` (Middleware Interceptors)
+A developer installing `veyra` via `pip install veyra` interacts with:
+1. `from veyra import Veyra` (Canonical Python SDK: `@veyra.wrap`, `wrap_mcp`, `wrap_http`, `wrap_agent`)
+2. In-process middleware interceptors (primary architecture)
 3. `veyra` CLI (`veyra doctor`, `veyra config explain`, `veyra replay`, etc.)
+4. `veyra proxy mcp` (Optional compatibility utility for external processes; not an API gateway product)

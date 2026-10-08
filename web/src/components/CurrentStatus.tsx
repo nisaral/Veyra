@@ -2,9 +2,9 @@ import { CheckCircle2, ShieldCheck, BarChart3, Terminal } from "lucide-react";
 
 export default function CurrentStatus() {
   const verifiedItems = [
-    { title: "132 Python Tests Passing", detail: "Passing offline unit & integration test suite in under 4 seconds" },
+    { title: "Python test suite", detail: "Run pytest in python/; count is the latest local run, not a marketing badge" },
     { title: "Tier 0 Correctness Validation", detail: "200+ synthetic cases: 0 false interventions, 0 unsafe retries, 100% classification accuracy" },
-    { title: "ToolMisuseBench Controlled Win", detail: "41.7% vs 16.7% raw baseline (+25pp), 50% boundary recovery, 15 re-plans eliminated" },
+    { title: "ToolMisuseBench", detail: "Local adapter only. Public +25pp headline is not claimed until a frozen run with trajectories exists." },
     { title: "Safe Argument Normalizer", detail: "Strict scalar & enum coercion ('42' -> 42, ISO dates, whitespace). Zero semantic guessing" },
     { title: "7-Tier Failure Taxonomy", detail: "Structured classification for schema, transient, rate limit, precondition, auth, and unknown state" },
     { title: "Bounded Safe Retry Engine", detail: "Retries allowed ONLY on idempotent transient/rate-limit errors. 0 unsafe write retries" },

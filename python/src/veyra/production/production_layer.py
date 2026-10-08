@@ -495,9 +495,21 @@ class VeyraMiddleware:
             if decision.kind == DecisionKind.DENY:
                 raise PermissionError(f"Veyra Rejected Proposed Execution: {decision.reason}")
 
-            # Safe execution of resolved candidate
             target_fn = decision.action.executable if (decision.action and decision.action.executable) else fn
-            return self.execute_action(decision, executor_fn=target_fn)
+            is_mut = sec in (SideEffectClass.NON_IDEMPOTENT_MUTATION, SideEffectClass.DESTRUCTIVE)
+            try:
+                if is_mut:
+                    return target_fn(**call_kwargs) if call_kwargs else target_fn()
+                return self.execute_action(decision, executor_fn=target_fn)
+            except (TimeoutError, ConnectionError, OSError):
+                if is_mut:
+                    return self.handle_unknown_ack(
+                        tool_name=tool_name,
+                        arguments=call_kwargs,
+                        verification_fn=verification_fn,
+                        is_idempotent=False,
+                    )
+                raise
 
         wrapped.__veyra_wrapped__ = True  # type: ignore
         wrapped.__name__ = tool_name

@@ -33,7 +33,7 @@ export default function Navbar() {
             </div>
           </Link>
           <span className="hidden sm:inline-block px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-[11px] font-mono text-slate-600">
-            v0.1.0-alpha · Apache-2.0
+            v0.2.0 · Apache-2.0
           </span>
         </div>
 

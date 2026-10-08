@@ -72,7 +72,7 @@ export default function ExecutionComparison() {
                   <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
                   <h3 className="font-semibold text-slate-900 text-sm">Agent + Veyra (Boundary Reliability)</h3>
                 </div>
-                <span className="text-[11px] font-mono text-emerald-600 font-semibold">41.7% (+25pp) Controlled Success</span>
+                <span className="text-[11px] font-mono text-emerald-600 font-semibold">0% Duplicate Mutations (Verified)</span>
               </div>
 
               {/* Diagram */}

@@ -28,7 +28,7 @@ export default function GitHubPage() {
           {/* Action CTAs */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
             <a
-              href="https://github.com/nisaral/EB-JEPA/tree/main/veyra"
+              href="https://github.com/nisaral/Veyra"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-md transition-all"

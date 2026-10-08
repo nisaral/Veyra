@@ -81,6 +81,12 @@ def test_tage_saturating_counters_and_longest_match():
     assert conf4 >= 0.5
 
 
+def test_case_memory_optional_off_by_default():
+    memory = OnlineExecutionMemory()
+    policy = AdaptiveHistoryRoutePolicy(memory=memory, confidence_threshold=0.5)
+    assert policy.use_case_memory is False
+
+
 def test_adaptive_history_policy_select_and_defer():
     memory = OnlineExecutionMemory()
     policy = AdaptiveHistoryRoutePolicy(memory=memory, confidence_threshold=0.5, defer_on_uncertainty=True)

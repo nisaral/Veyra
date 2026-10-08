@@ -16,13 +16,13 @@ export default function DocsPage() {
             <aside className="lg:col-span-3 space-y-4">
               <div className="sticky top-24 technical-card p-4 bg-white">
                 <div className="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                  Veyra v0.2.0 Docs Index
+                  Veyra v0.2.0 docs
                 </div>
                 <nav className="space-y-1 text-xs font-mono">
                   <a href="#quickstart" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-800 font-medium">1. Quickstart & Install</a>
                   <a href="#public-api" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">2. Unified Public API</a>
                   <a href="#frameworks" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">3. Framework Integrations</a>
-                  <a href="#mcp-proxy" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">4. Veyra MCP Proxy</a>
+                  <a href="#mcp-interceptor" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">4. MCP client interceptor</a>
                   <a href="#config-system" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">5. Configuration System</a>
                   <a href="#replay-diff" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">6. Replay & Trajectory Diffing</a>
                   <a href="#unknown-ack" className="block py-1.5 px-2 rounded hover:bg-slate-100 text-slate-600">7. UNKNOWN_ACK & Transactions</a>
@@ -130,22 +130,19 @@ mw = VeyraMicrosoftAgentMiddleware(veyra)`}</pre>
                 </div>
               </section>
 
-              {/* Section 4: MCP Proxy */}
-              <section id="mcp-proxy" className="technical-card p-6 sm:p-8 bg-white space-y-4">
+              <section id="mcp-interceptor" className="technical-card p-6 sm:p-8 bg-white space-y-4">
                 <div className="flex items-center gap-2 text-xs font-mono text-slate-500 font-semibold">
-                  <Layers className="w-4 h-4 text-slate-700" /> 4. Veyra MCP Proxy
+                  <Layers className="w-4 h-4 text-slate-700" /> 4. MCP client interceptor
                 </div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  Zero-Code-Change Model Context Protocol Proxy
+                  Wrap MCP tool calls in-process
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  Run Veyra as an independent execution proxy between standard MCP clients and MCP servers:
+                  Veyra is not a network proxy. Wrap the MCP client or individual tools so proposals pass through the execution contract before the server runs.
                 </p>
                 <div className="bg-slate-950 text-slate-100 p-4 rounded-lg font-mono text-xs border border-slate-800 leading-relaxed">
-                  <pre>{`$ veyra proxy mcp
-
-# Architecture:
-# Agent (MCP Client) -> Veyra MCP Proxy -> Veyra Policy/Resolution -> Real MCP Server`}</pre>
+                  <pre>{`# Agent proposes -> VeyraMiddleware.wrap_mcp / wrap_function -> MCP server
+# CLI: veyra doctor   # checks ODYSSEY_API_KEY, LM Studio fallback`}</pre>
                 </div>
               </section>
 

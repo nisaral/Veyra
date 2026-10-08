@@ -51,7 +51,7 @@ export default function DashboardPage() {
                 <span className="badge-demo">DEMO RUN</span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Real-time adaptive execution trace & policy decision monitor
+                Synthetic DEMO playback. For real traces use the CLI: veyra dashboard --runs out/dev
               </p>
             </div>
 

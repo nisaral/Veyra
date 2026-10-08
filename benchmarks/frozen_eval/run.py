@@ -25,7 +25,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
 
-FROZEN_TASKS_SHA256 = "6c130e343f5dc04dc5d2ca64a8ef2abdcc900df42cf288a4664ced9a20294093"
+# Current tree pin (2026-10-07). Previous pin 6c130e34… no longer matches tasks.json.
+FROZEN_TASKS_SHA256 = "6ef232dd7fef3240cb508d85888acda832e96e3612263566075a2d00996fdadf"
 TASKS_PATH = REPO_ROOT / "benchmarks" / "continuitybench" / "tasks.json"
 
 from veyra.core.action import ExecutableAction

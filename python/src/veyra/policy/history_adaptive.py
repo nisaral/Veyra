@@ -242,10 +242,12 @@ class AdaptiveHistoryRoutePolicy(RoutePolicy):
         memory: OnlineExecutionMemory | None = None,
         confidence_threshold: float = 0.50,
         defer_on_uncertainty: bool = False,
+        use_case_memory: bool = False,
     ):
         self.memory = memory or OnlineExecutionMemory()
         self.confidence_threshold = confidence_threshold
         self.defer_on_uncertainty = defer_on_uncertainty
+        self.use_case_memory = use_case_memory
 
     def resolve(
         self,
@@ -280,22 +282,21 @@ class AdaptiveHistoryRoutePolicy(RoutePolicy):
                 reason=f"TAGE multi-history match (H={h_len}, conf={tage_conf:.2f})",
             )
 
-        # 2. Consult Case-Based Execution Memory
-        cbr_tool, cbr_sim = self.memory.query_case_similarity(
-            proposed_tool=proposed_tool,
-            arguments=proposed_args,
-            history=history,
-            allowed_candidates=allowed_tools,
-        )
-
-        if cbr_tool and cbr_sim >= self.confidence_threshold:
-            selected_action = cand_by_name[cbr_tool]
-            return Decision.select(
-                selected_action,
-                reason=f"Case-based execution memory match (sim={cbr_sim:.2f})",
+        cbr_sim = 0.0
+        if self.use_case_memory:
+            cbr_tool, cbr_sim = self.memory.query_case_similarity(
+                proposed_tool=proposed_tool,
+                arguments=proposed_args,
+                history=history,
+                allowed_candidates=allowed_tools,
             )
+            if cbr_tool and cbr_sim >= self.confidence_threshold:
+                selected_action = cand_by_name[cbr_tool]
+                return Decision.select(
+                    selected_action,
+                    reason=f"Case-based execution memory match (sim={cbr_sim:.2f})",
+                )
 
-        # 3. Fallback: Defer if calibrated uncertainty is enabled and confidence is too low
         if self.defer_on_uncertainty:
             return Decision.defer(
                 reason=f"insufficient confidence for resolution (tage={tage_conf:.2f}, cbr={cbr_sim:.2f})"

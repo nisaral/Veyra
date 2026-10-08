@@ -13,6 +13,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.env
+.env.local
+eval_lab/out/
+# keep PLAN_RUN_RESULTS if we want it committed — ignore other lab dumps
+!eval_lab/out/PLAN_RUN_RESULTS.json
 
 # local caches + run data
 bench_toolmisuse_official/
